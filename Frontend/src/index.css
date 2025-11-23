@@ -1,0 +1,18 @@
+/* CRITICAL FIX: 
+These three lines tell the build system to generate and inject 
+all the necessary Tailwind CSS utility classes into your project.
+*/
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Optional: Adding a default font and background color for the body.
+This ensures the Inter font (or system fallback) is used everywhere. 
+*/
+body {
+    font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+    background-color: #ffffff; 
+}
+.test-red {
+  @apply bg-red-500 text-white p-4 text-center;
+}
