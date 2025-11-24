@@ -5,7 +5,13 @@ import './EmployerProfile.css';
 import type { DashboardProps } from '../types';
 import { apiService } from '../services/api';
 
-const EmployerProfile: React.FC<DashboardProps> = ({ onLogout, user }) => {
+interface EmployerProfileProps extends DashboardProps {
+  embedded?: boolean;
+  onBack?: () => void;
+  onEditProfile?: () => void;
+}
+
+const EmployerProfile: React.FC<EmployerProfileProps> = ({ user, embedded = false, onBack, onEditProfile }) => {
   const navigate = useNavigate();
   const [recruiterData, setRecruiterData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -13,7 +19,11 @@ const EmployerProfile: React.FC<DashboardProps> = ({ onLogout, user }) => {
   useEffect(() => {
     const loadProfile = async () => {
       if (!user?.id || user?.role !== 'recruiter') {
-        navigate('/dashboard');
+        if (embedded && onBack) {
+          onBack();
+        } else {
+          navigate('/dashboard');
+        }
         return;
       }
 
@@ -28,11 +38,27 @@ const EmployerProfile: React.FC<DashboardProps> = ({ onLogout, user }) => {
     };
 
     loadProfile();
-  }, [user, navigate]);
+  }, [user, navigate, embedded, onBack]);
+
+  const handleBack = () => {
+    if (embedded && onBack) {
+      onBack();
+    } else {
+      navigate('/dashboard');
+    }
+  };
+
+  const handleEditProfile = () => {
+    if (onEditProfile) {
+      onEditProfile();
+    } else {
+      navigate('/settings');
+    }
+  };
 
   if (isLoading) {
     return (
-      <div className="employer-profile-page">
+      <div className={`employer-profile-page${embedded ? ' embedded' : ''}`}>
         <div className="loading-container">
           <div className="loading-spinner"></div>
           <p>Loading profile...</p>
@@ -43,11 +69,11 @@ const EmployerProfile: React.FC<DashboardProps> = ({ onLogout, user }) => {
 
   if (!recruiterData) {
     return (
-      <div className="employer-profile-page">
+      <div className={`employer-profile-page${embedded ? ' embedded' : ''}`}>
         <div className="error-container">
           <h2>Error</h2>
           <p>Could not load employer profile</p>
-          <button onClick={() => navigate('/dashboard')} className="back-button">
+          <button onClick={handleBack} className="back-button">
             ← Back to Dashboard
           </button>
         </div>
@@ -56,21 +82,23 @@ const EmployerProfile: React.FC<DashboardProps> = ({ onLogout, user }) => {
   }
 
   return (
-    <div className="employer-profile-page">
+    <div className={`employer-profile-page${embedded ? ' embedded' : ''}`}>
       {/* Header */}
-      <header className="employer-profile-header">
-        <div className="header-content">
-          <button onClick={() => navigate('/dashboard')} className="back-button-header">
-            ← Back
-          </button>
-          <div className="header-logo">
-            <div className="logo-container">
-              <div className="logo-icon-briefcase">💼</div>
-              <span className="logo-text">RecruPLus</span>
+      {!embedded && (
+        <header className="employer-profile-header">
+          <div className="header-content">
+            <button onClick={handleBack} className="back-button-header">
+              ← Back
+            </button>
+            <div className="header-logo">
+              <div className="logo-container">
+                <div className="logo-icon-briefcase">💼</div>
+                <span className="logo-text">RecruPLus</span>
+              </div>
             </div>
           </div>
-        </div>
-      </header>
+        </header>
+      )}
 
       <div className="employer-profile-content">
         <main className="employer-profile-main">
@@ -85,7 +113,7 @@ const EmployerProfile: React.FC<DashboardProps> = ({ onLogout, user }) => {
               </h1>
               <p className="profile-role">Recruiter</p>
               <button 
-                onClick={() => navigate('/settings')}
+                onClick={handleEditProfile}
                 className="edit-profile-btn"
               >
                 <Edit2 size={18} />
@@ -160,25 +188,27 @@ const EmployerProfile: React.FC<DashboardProps> = ({ onLogout, user }) => {
           {/* Action Buttons */}
           <div className="action-buttons">
             <button 
-              onClick={() => navigate('/settings')}
+              onClick={handleEditProfile}
               className="btn-primary"
             >
               <Edit2 size={18} />
               Edit Profile
             </button>
             <button 
-              onClick={() => navigate('/dashboard')}
+              onClick={handleBack}
               className="btn-secondary"
             >
-              Back to Dashboard
+              {embedded ? 'Back to Overview' : 'Back to Dashboard'}
             </button>
           </div>
         </main>
       </div>
 
-      <footer className="employer-profile-footer">
-        <p>@2024 MyJob - Job Portal. All rights Reserved</p>
-      </footer>
+      {!embedded && (
+        <footer className="employer-profile-footer">
+          <p>@2024 MyJob - Job Portal. All rights Reserved</p>
+        </footer>
+      )}
     </div>
   );
 };

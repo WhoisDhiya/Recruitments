@@ -22,6 +22,8 @@
 }
 
 .top-nav-link {
+  background: none;
+  border: none;
   text-decoration: none;
   color: #666;
   font-weight: 500;
@@ -29,6 +31,7 @@
   padding: 0.5rem 0;
   position: relative;
   transition: color 0.3s ease;
+  cursor: pointer;
 }
 
 .top-nav-link:hover {
@@ -198,6 +201,10 @@
   border-radius: 8px;
   transition: all 0.3s ease;
   font-size: 0.9rem;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
 }
 
 .sidebar-link:hover {
@@ -832,5 +839,82 @@
   background: #ccc;
   cursor: not-allowed;
   opacity: 0.6;
+}
+
+.embedded-section {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.candidate-section {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 1.75rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.section-description {
+  color: #6b7280;
+  margin-bottom: 1.25rem;
+  font-size: 0.9rem;
+}
+
+.candidate-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.candidate-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 1.25rem;
+  background: #fefefe;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.candidate-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.candidate-initials {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2563eb, #9333ea);
+  color: #fff;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.candidate-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  color: #6b7280;
+  font-size: 0.85rem;
+}
+
+.candidate-meta .status-badge {
+  text-transform: capitalize;
+}
+
+.candidate-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.btn-primary.btn-disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
 }
 

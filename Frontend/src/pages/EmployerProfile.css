@@ -5,6 +5,25 @@
   flex-direction: column;
 }
 
+.employer-profile-page.embedded {
+  min-height: auto;
+  background-color: transparent;
+  padding: 0;
+}
+
+.employer-profile-page.embedded .employer-profile-header,
+.employer-profile-page.embedded .employer-profile-footer {
+  display: none;
+}
+
+.employer-profile-page.embedded .employer-profile-content {
+  padding: 0;
+}
+
+.employer-profile-page.embedded .employer-profile-main {
+  box-shadow: none;
+}
+
 /* Header */
 .employer-profile-header {
   background-color: #fff;

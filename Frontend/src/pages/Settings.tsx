@@ -8,9 +8,10 @@ import { apiService } from '../services/api';
 
 interface SettingsProps {
   user?: any;
+  onAfterSave?: () => void;
 }
 
-const Settings: React.FC<SettingsProps> = ({ user }) => {
+const Settings: React.FC<SettingsProps> = ({ user, onAfterSave }) => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'Personal' | 'Profile' | 'Social' | 'Account'>('Personal');
   const [showPassword, setShowPassword] = useState(false);
@@ -133,11 +134,18 @@ const Settings: React.FC<SettingsProps> = ({ user }) => {
 
       setSaveMessage('✓ Changes saved successfully');
       
-      // Redirect to employer profile if recruiter
+      // Redirect or notify after save
       if (user?.role === 'recruiter') {
-        setTimeout(() => {
-          navigate('/employer-profile');
-        }, 1000);
+        if (onAfterSave) {
+          setTimeout(() => {
+            setSaveMessage('');
+            onAfterSave();
+          }, 800);
+        } else {
+          setTimeout(() => {
+            navigate('/employer-profile');
+          }, 1000);
+        }
       } else {
         setTimeout(() => setSaveMessage(''), 3000);
       }
