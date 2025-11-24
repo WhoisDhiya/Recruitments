@@ -5,6 +5,7 @@ import type { DashboardProps, PostedJob, RecruiterStats } from '../types';
 import Settings from './Settings';
 import Homepage from './homepage';
 import EmployerProfile from './EmployerProfile';
+import PostJobForm from './PostJobForm';
 import { apiService } from '../services/api';
 
 interface CandidateSummary {
@@ -364,7 +365,7 @@ const RecruiterDashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
 
   const handleSidebarClick = (itemId: string) => {
     if (itemId === 'Post_a_Job') {
-      navigate('/post-job');
+      setActiveTab('Post_a_Job');
       return;
     }
     setActiveTab(itemId as RecruiterTab);
@@ -647,6 +648,19 @@ const RecruiterDashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
           emptyMessage: 'You have not saved any candidates yet.',
           allowRemove: true
         });
+      case 'Post_a_Job':
+        return (
+          <div className="embedded-section">
+            <PostJobForm
+              user={user}
+              onLogout={onLogout}
+              onSuccess={() => {
+                loadDashboardData();
+                setActiveTab('My_Jobs');
+              }}
+            />
+          </div>
+        );
       case 'Plans_Billing':
         return renderComingSoon('Plans & Billing');
       case 'All_Companies':
@@ -686,7 +700,7 @@ const RecruiterDashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
           <button className="notification-btn-header">🔔</button>
           <button 
             className="post-job-btn"
-            onClick={() => navigate('/post-job')}
+            onClick={() => setActiveTab('Post_a_Job')}
           >
             Post A Job
           </button>
