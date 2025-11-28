@@ -1,10 +1,25 @@
 // controllers/paymentController.js
-const Stripe = require("stripe");
 const db = require("../config/database");
 const Pack = require("../models/Pack"); // Utilisons tes modèles !
-const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+const Payment = require("../models/Payment");
+const RecruiterSubscription = require("../models/RecruiterSubscription");
+
+// If payments are disabled via env, handlers will return 503 with a friendly message
+const paymentsDisabled = process.env.DISABLE_PAYMENTS === 'true';
+let stripe = null;
+if (!paymentsDisabled) {
+    try {
+        stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+    } catch (err) {
+        console.warn('Stripe init failed in paymentController:', err && err.message ? err.message : err);
+        stripe = null;
+    }
+}
 
 exports.createCheckoutSession = async (req, res) => {
+    if (paymentsDisabled) {
+        return res.status(503).json({ status: 'UNAVAILABLE', message: 'Payments are temporarily disabled' });
+    }
     try {
         const { recruiter_id, pack_id } = req.body;
 
@@ -13,6 +28,10 @@ exports.createCheckoutSession = async (req, res) => {
 
         if (!pack) {
             return res.status(400).json({ message: "Pack introuvable" });
+        }
+
+        if (!stripe) {
+            return res.status(500).json({ message: 'Stripe is not configured on the server' });
         }
 
         // 2. Créer la session Stripe avec METADATA
@@ -49,17 +68,19 @@ exports.createCheckoutSession = async (req, res) => {
     }
 };
 
-// controllers/paymentController.js
-const Payment = require("../models/Payment");
-const RecruiterSubscription = require("../models/RecruiterSubscription");
-// ... imports précédents
-
 exports.handlePaymentSuccess = async (req, res) => {
+    if (paymentsDisabled) {
+        return res.status(503).json({ status: 'UNAVAILABLE', message: 'Payments are temporarily disabled' });
+    }
     try {
         const { session_id } = req.body; // Ou req.query selon comment tu appelles cette route
 
         if (!session_id) {
             return res.status(400).json({ message: "Session ID manquant" });
+        }
+
+        if (!stripe) {
+            return res.status(500).json({ message: 'Stripe is not configured on the server' });
         }
 
         // 1. Vérifier la session auprès de Stripe
@@ -98,8 +119,6 @@ exports.handlePaymentSuccess = async (req, res) => {
         });
 
         // 5. Créer l'abonnement (Subscription)
-        // D'abord, on peut désactiver les anciens abonnements si nécessaire, ou juste ajouter le nouveau.
-        // Ici, on crée le nouveau.
         const subscriptionId = await RecruiterSubscription.create({
             recruiter_id: recruiter_id,
             pack_id: pack_id,

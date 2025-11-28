@@ -1,143 +1,73 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import type { User } from '../types';
+import React, { useEffect, useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import type { User, Offer } from '../types';
+import { apiService } from '../services/api';
 
-// --- TYPE DEFINITIONS (Unchanged) ---
-interface Stat {
-  count: string;
-  label: string;
-  icon: 'jobs' | 'candidates' | 'employers' | 'internships';
-}
-
-interface Job {
-  id: number;
-  title: string;
-  companyName: string;
-  logoInitial: string;
-  location: string;
-  type: string;
-}
-
-interface Category {
-  id: number;
-  name: string;
-  jobCount: number;
-  iconInitial: string;
-}
-
-interface Company {
-  id: number;
-  name: string;
-  logoInitial: string;
-  jobsCount: number;
-}
-
-// --- STATIC DATA DEFINITIONS ---
-const STATS_DATA: Stat[] = [
-  { count: '1,73,234', label: 'Jobs Available', icon: 'jobs' },
-  { count: '89,734', label: 'Candidates Registered', icon: 'candidates' },
-  { count: '7,532', label: 'Companies Hiring', icon: 'employers' },
-  { count: '9,712', label: 'Iinternships Offered', icon: 'internships' },
-];
-
-const FEATURED_JOBS: Job[] = [
-  { id: 1, title: 'Senior UX Designer', companyName: 'Apple', logoInitial: 'A', location: 'Cupertino, CA', type: 'Design' },
-  { id: 2, title: 'Software Engineer', companyName: 'Google', logoInitial: 'G', location: 'Mountain View, CA', type: 'Full-time' },
-  { id: 3, title: 'Product Designer', companyName: 'Stripe', logoInitial: 'S', location: 'San Francisco, CA', type: 'Full-time' },
-  { id: 4, title: 'Marketing Officer', companyName: 'Nike', logoInitial: 'N', location: 'Beaverton, OR', type: 'Full-time' },
-  { id: 5, title: 'Interaction Designer', companyName: 'Netflix', logoInitial: 'N', location: 'Los Gatos, CA', type: 'Full-time' },
-];
-
-const POPULAR_CATEGORIES: Category[] = [
-  { id: 101, name: 'Music & Audio', jobCount: 1250, iconInitial: 'MA' },
-  { id: 102, name: 'UI & UX Design', jobCount: 890, iconInitial: 'UD' },
-  { id: 103, name: 'Digital Marketing', jobCount: 1540, iconInitial: 'DM' },
-  { id: 104, name: 'Health & Care', jobCount: 780, iconInitial: 'HC' },
-  { id: 105, name: 'Data & Science', jobCount: 600, iconInitial: 'DS' },
-];
-
-const TOP_COMPANIES: Company[] = [
-  { id: 201, name: 'Dropbox', logoInitial: 'D', jobsCount: 450 },
-  { id: 202, name: 'Upwork', logoInitial: 'U', jobsCount: 890 },
-  { id: 203, name: 'Slack', logoInitial: 'S', jobsCount: 1200 },
-  { id: 204, name: 'Freepik', logoInitial: 'F', jobsCount: 320 },
-];
-
-// --- REUSABLE STATIC COMPONENTS ---
-const IconPlaceholder: React.FC<{ initial: string, className?: string }> = ({ initial, className = 'h-5 w-5' }) => (
-  <div className={`bg-blue-100 text-blue-600 rounded-full p-2 flex items-center justify-center font-bold ${className}`}>
-    {initial}
+// Composant pour afficher une carte d'offre d'emploi
+const JobCard: React.FC<{ job: Offer; onClick: (id: number) => void }> = ({ job, onClick }) => (
+  <div 
+    onClick={() => onClick(job.id)}
+    className="bg-white rounded-lg shadow-sm p-6 border border-gray-200 hover:shadow-md transition-shadow cursor-pointer"
+  >
+    <div className="flex items-start space-x-4">
+      <div className="flex-shrink-0">
+        <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xl">
+          {job.title ? job.title[0].toUpperCase() : 'J'}
+        </div>
+      </div>
+      <div className="flex-1 min-w-0">
+        <h3 className="text-lg font-semibold text-gray-900 truncate">{job.title}</h3>
+        <p className="text-sm text-gray-500">{job.company_name || 'Entreprise non spécifiée'}</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+            {job.employment_type || 'Temps plein'}
+          </span>
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+            {job.location || 'Lieu non spécifié'}
+          </span>
+        </div>
+      </div>
+    </div>
   </div>
 );
 
-interface HeaderProps {
-  user?: User;
-  isAuthenticated: boolean;
-  onLogout?: () => void;
-}
-
-const Header: React.FC<HeaderProps> = ({ user, isAuthenticated, onLogout }) => {
+// Composant pour le header simplifié
+const Header: React.FC<{ user?: User; isAuthenticated: boolean; onLogout?: () => void }> = ({ user, isAuthenticated, onLogout }) => {
   const navigate = useNavigate();
-
-  const handleLoginClick = () => {
-    navigate('/signin');
-  };
-
-  const handleSignUpClick = () => {
-    navigate('/signup');
-  };
-
-  const handleDashboardClick = () => {
-    navigate('/dashboard');
-  };
-
-  const handleLogoutClick = () => {
-    if (onLogout) {
-      onLogout();
-    }
-  };
-
   return (
-    <header className="border-b shadow-sm">
-      <div className="max-w-7xl mx-auto flex justify-between items-center py-4 px-4 sm:px-6 lg:px-8">
-        <h1 className="text-xl font-bold text-blue-600">RecruPlus</h1>
-        <nav className="hidden md:flex space-x-6 text-sm text-gray-600">
-          {['Home', 'Find Jobs', 'Resources', 'Support'].map(item => (
-            <a key={item} href="#" className="hover:text-blue-600">{item}</a>
-          ))}
-        </nav>
-        <div className="space-x-4 flex items-center">
-          {isAuthenticated && user ? (
+    <header className="bg-white shadow-sm">
+      <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+        <h1 className="text-2xl font-bold text-blue-600">RecruPlus</h1>
+        <div className="flex items-center space-x-4">
+          {isAuthenticated ? (
             <>
-              <span className="text-sm text-gray-700 font-medium">
-                {user.first_name} {user.last_name}
-              </span>
+              <span className="text-gray-700">Bonjour, {user?.first_name || 'Utilisateur'}</span>
               <button 
-                onClick={handleDashboardClick}
-                className="text-sm text-blue-600 font-medium hover:text-blue-700 transition-colors"
+                onClick={() => navigate('/dashboard')}
+                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
               >
-                Dashboard
+                Tableau de bord
               </button>
               <button 
-                onClick={handleLogoutClick}
-                className="text-sm text-gray-600 font-medium hover:text-gray-700 transition-colors"
+                onClick={onLogout}
+                className="text-gray-700 hover:text-blue-600"
               >
-                Logout
+                Déconnexion
               </button>
             </>
           ) : (
             <>
               <button 
-                onClick={handleLoginClick}
-                className="text-sm text-blue-600 font-medium hover:text-blue-700 transition-colors"
+                onClick={() => navigate('/signin')}
+                className="text-gray-700 hover:text-blue-600"
               >
-                Login
+                Connexion
               </button>
               <button 
-                onClick={handleSignUpClick}
-                className="bg-blue-600 text-white text-sm px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors"
+                onClick={() => navigate('/signup')}
+                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
               >
-                Sign Up
+                S'inscrire
               </button>
             </>
           )}
@@ -147,107 +77,48 @@ const Header: React.FC<HeaderProps> = ({ user, isAuthenticated, onLogout }) => {
   );
 };
 
-const StatsBar: React.FC<{ stats: Stat[] }> = ({ stats }) => (
-  <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-12">
-    {stats.map((stat, index) => (
-      <div
-        key={index}
-        className="flex items-center space-x-4 bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition"
-      >
-        <IconPlaceholder initial={stat.icon[0].toUpperCase()} className="h-12 w-12 text-blue-600 bg-blue-100" />
-        <div>
-          <p className="text-2xl font-bold text-gray-800">{stat.count}</p>
-          <p className="text-sm text-gray-500 capitalize">{stat.label}</p>
-        </div>
-      </div>
-    ))}
-  </div>
-);
+// Composant pour l'accueil
+const Homepage: React.FC<{ user?: User; isAuthenticated: boolean; onLogout?: () => void }> = ({ user, isAuthenticated, onLogout }) => {
+  const navigate = useNavigate();
+  const [featuredJobs, setFeaturedJobs] = useState<Offer[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-const HowItWorks: React.FC = () => (
-  <div className="py-12 bg-gray-50">
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-      <h2 className="text-3xl font-bold text-gray-800 mb-8">How RecruPlus Works</h2>
-      <div className="flex flex-col md:flex-row justify-between space-y-6 md:space-y-0 md:space-x-8">
-        {[
-          { title: 'Upload CV/Resume', desc: 'Create account, upload CV, and set interests.' },
-          { title: 'Find Suitable Jobs', desc: 'Find jobs that align with your skills.' },
-          { title: 'Apply for Jobs', desc: 'Apply to your preferred job with one click.' },
-        ].map((step, index) => (
-          <div key={index} className="flex flex-col items-center p-4">
-            <IconPlaceholder initial={`${index + 1}`} className="h-16 w-16 text-blue-600 bg-blue-100 mb-4 text-lg" />
-            <h3 className="text-xl font-semibold mb-2">{step.title}</h3>
-            <p className="text-gray-600">{step.desc}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  </div>
-);
+  // Charger les offres d'emploi
+  useEffect(() => {
+    const loadJobs = async () => {
+      try {
+        setIsLoading(true);
+        const jobs = await apiService.getOffers();
+        // Filtrer les offres actives (non expirées)
+        const activeJobs = jobs.filter(job => {
+          if (!job.date_expiration) return true;
+          return new Date(job.date_expiration) > new Date();
+        });
+        setFeaturedJobs(activeJobs.slice(0, 4)); // Prendre les 4 premières offres
+      } catch (err) {
+        console.error('Erreur lors du chargement des offres:', err);
+        setError('Impossible de charger les offres. Veuillez réessayer plus tard.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-const CategoryCard: React.FC<{ category: Category }> = ({ category }) => (
-  <div className="flex items-center space-x-4 bg-white p-4 rounded-xl border border-gray-200 hover:shadow-lg transition cursor-pointer">
-    <IconPlaceholder initial={category.iconInitial} className="h-8 w-8 text-blue-600 bg-blue-100 text-xs" />
-    <div>
-      <p className="font-semibold text-gray-800">{category.name}</p>
-      <p className="text-sm text-gray-500">{category.jobCount} opportunities</p>
-    </div>
-  </div>
-);
+    loadJobs();
+  }, []);
 
-const JobCard: React.FC<{ job: Job }> = ({ job }) => (
-  <div className="flex justify-between items-center p-5 border-b hover:bg-gray-50 transition-all duration-200">
-    <div className="flex items-center space-x-4">
-      <div className="w-12 h-12 rounded-lg bg-gray-200 flex items-center justify-center font-bold text-gray-600">
-        {job.logoInitial}
-      </div>
-      <div>
-        <p className="font-semibold text-lg text-gray-800">{job.title} - {job.companyName}</p>
-        <p className="text-sm text-gray-500">{job.location} · {job.type}</p>
-      </div>
-    </div>
-    <button className="text-blue-600 border border-blue-600 px-4 py-2 text-sm rounded-lg hover:bg-blue-600 hover:text-white transition-all duration-200">
-      Apply Now
-    </button>
-  </div>
-);
+  const handleJobClick = (jobId: number) => {
+    navigate(`/job-details/${jobId}`);
+  };
 
-const CompanyCard: React.FC<{ company: Company }> = ({ company }) => (
-  <div className="bg-white p-6 rounded-xl border border-gray-200 flex flex-col items-center text-center hover:shadow-md transition-all duration-200">
-    <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center font-bold text-xl text-gray-600 mb-4">
-      {company.logoInitial}
-    </div>
-    <p className="font-semibold text-lg text-gray-800">{company.name}</p>
-    <p className="text-sm text-gray-500 mb-4">{company.jobsCount} Jobs</p>
-    <button className="text-blue-600 border border-blue-600 px-4 py-2 text-sm rounded-lg hover:bg-blue-600 hover:text-white transition-all duration-200">
-      Open Position
-    </button>
-  </div>
-);
+  const handleViewAllJobs = () => {
+    navigate('/find-jobs');
+  };
 
-const Footer: React.FC = () => (
-  <footer className="bg-gray-900 text-white mt-16">
-    <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-8 border-b border-gray-700 pb-8 mb-8">
-        <div><h4 className="font-bold mb-3">Quick Links</h4><ul className="space-y-2 text-sm text-gray-400"><li>About Us</li><li>Contact</li></ul></div>
-        <div><h4 className="font-bold mb-3">Candidates</h4><ul className="space-y-2 text-sm text-gray-400"><li>Browse Jobs</li><li>Resume</li></ul></div>
-        <div><h4 className="font-bold mb-3">Employers</h4><ul className="space-y-2 text-sm text-gray-400"><li>Post a Job</li><li>Privacy Policy</li></ul></div>
-        <div><h4 className="font-bold mb-3">Support</h4><ul className="space-y-2 text-sm text-gray-400"><li>Help Center</li><li>FAQ</li></ul></div>
-      </div>
-      <p className="text-center text-sm text-gray-500">
-        &copy; {new Date().getFullYear()} JobPilot. All rights reserved.
-      </p>
-    </div>
-  </footer>
-);
+  const handleFindJobsClick = () => {
+    navigate('/find-jobs');
+  };
 
-interface HomepageProps {
-  user?: User;
-  isAuthenticated: boolean;
-  onLogout?: () => void;
-}
-
-const Homepage: React.FC<HomepageProps> = ({ user, isAuthenticated, onLogout }) => {
   return (
     <div className="min-h-screen bg-white">
       <Header user={user} isAuthenticated={isAuthenticated} onLogout={onLogout} />
@@ -272,37 +143,21 @@ const Homepage: React.FC<HomepageProps> = ({ user, isAuthenticated, onLogout }) 
                     placeholder="Location"
                     className="p-3 w-full sm:w-1/3 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 hidden sm:block"
                   />
-                  <button className="bg-blue-600 text-white px-8 py-3 rounded-md font-semibold hover:bg-blue-700 transition-all duration-200">
+                  <button onClick={handleFindJobsClick} className="bg-blue-600 text-white px-8 py-3 rounded-md font-semibold hover:bg-blue-700 transition-all duration-200">
                     Find Job
                   </button>
                 </div>
               </div>
               <div className="hidden md:block w-96 h-64 mt-8 md:mt-0 relative rounded-lg overflow-hidden">
-              <img
-                src="/recrutingpic.png"
-                alt="Job Illustration"
-                className="w-full h-full object-cover"
-              />
-              {/* Gradient overlay for blending */}
-              <div className="absolute inset-0 bg-gradient-to-t from-white via-transparent to-transparent"></div>
-            </div> </div>
-            <StatsBar stats={STATS_DATA} />
-          </div>
-        </section>
-
-        {/* How JobPilot Works */}
-        <HowItWorks />
-
-        {/* Popular Category */}
-        <section className="py-16 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center mb-8">
-            <h2 className="text-3xl font-bold text-gray-800">Popular Category</h2>
-            <a href="#" className="text-blue-600 font-medium hover:underline">View all &gt;</a>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            {POPULAR_CATEGORIES.map(category => (
-              <CategoryCard key={category.id} category={category} />
-            ))}
+                <img
+                  src="/recrutingpic.png"
+                  alt="Job Illustration"
+                  className="w-full h-full object-cover"
+                />
+                {/* Gradient overlay for blending */}
+                <div className="absolute inset-0 bg-gradient-to-t from-white via-transparent to-transparent"></div>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -310,51 +165,67 @@ const Homepage: React.FC<HomepageProps> = ({ user, isAuthenticated, onLogout }) 
         <section className="py-16 bg-white max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center mb-8">
             <h2 className="text-3xl font-bold text-gray-800">Featured opportunities</h2>
-            <a href="#" className="text-blue-600 font-medium hover:underline">View all &gt;</a>
+            <button onClick={handleViewAllJobs} className="text-blue-600 font-medium hover:underline">View all &gt;</button>
           </div>
-          <div className="border border-gray-200 rounded-xl overflow-hidden shadow-lg">
-            {FEATURED_JOBS.map(job => (
-              <JobCard key={job.id} job={job} />
-            ))}
-          </div>
-        </section>
-
-        {/* Top Companies */}
-        <section className="py-16 bg-gray-50 border-t">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center mb-8">
-              <h2 className="text-3xl font-bold text-gray-800">Top companies</h2>
-              <div className="flex space-x-2">
-                <button className="w-10 h-10 rounded-full border border-gray-300 text-gray-600 hover:bg-white">&lt;</button>
-                <button className="w-10 h-10 rounded-full border border-gray-300 text-gray-600 hover:bg-white">&gt;</button>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6 mt-8">
+            {isLoading ? (
+              <div className="col-span-2 text-center py-8">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+                <p className="mt-2 text-gray-600">Chargement des offres...</p>
               </div>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-6 gap-6">
-              {TOP_COMPANIES.map(company => (
-                <CompanyCard key={company.id} company={company} />
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Become a Candidate / Employer CTA */}
-        <section className="py-16 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-2 gap-8">
-          <div className="bg-gray-100 p-8 rounded-xl flex justify-between items-center hover:shadow-md transition-all duration-200">
-            <h3 className="text-xl font-bold text-gray-800">Become a Candidate</h3>
-            <button className="bg-white text-blue-600 border border-blue-600 px-6 py-2 rounded-lg font-semibold hover:bg-blue-50 hover:scale-105 transition-all duration-200">
-              Register Now
-            </button>
-          </div>
-          <div className="bg-blue-600 p-8 rounded-xl flex justify-between items-center hover:shadow-md transition-all duration-200">
-            <h3 className="text-xl font-bold text-white">Become an Employers</h3>
-            <button className="bg-white text-blue-600 px-6 py-2 rounded-lg font-semibold hover:bg-blue-50 hover:scale-105 transition-all duration-200">
-              Register Now
-            </button>
+            ) : featuredJobs.length > 0 ? (
+              featuredJobs.map((job) => (
+                <JobCard key={job.id} job={job} onClick={handleJobClick} />
+              ))
+            ) : (
+              <div className="col-span-2 text-center py-8">
+                <p className="text-gray-600">Aucune offre disponible pour le moment</p>
+              </div>
+            )}
           </div>
         </section>
       </main>
 
-      <Footer />
+      {/* Footer */}
+      <footer className="bg-gray-900 text-white py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+            <div>
+              <h3 className="text-lg font-semibold mb-4">RecruPlus</h3>
+              <p className="text-gray-400">La plateforme de recrutement qui simplifie votre recherche d'emploi.</p>
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold uppercase tracking-wider mb-4">Liens rapides</h4>
+              <ul className="space-y-2">
+                <li><Link to="/" className="text-gray-400 hover:text-white">Accueil</Link></li>
+                <li><Link to="/find-jobs" className="text-gray-400 hover:text-white">Offres d'emploi</Link></li>
+                <li><Link to="/about" className="text-gray-400 hover:text-white">À propos</Link></li>
+                <li><Link to="/contact" className="text-gray-400 hover:text-white">Contact</Link></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold uppercase tracking-wider mb-4">Entreprises</h4>
+              <ul className="space-y-2">
+                <li><Link to="/employers" className="text-gray-400 hover:text-white">Publier une offre</Link></li>
+                <li><Link to="/pricing" className="text-gray-400 hover:text-white">Tarifs</Link></li>
+                <li><Link to="/solutions" className="text-gray-400 hover:text-white">Solutions</Link></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold uppercase tracking-wider mb-4">Contact</h4>
+              <address className="not-italic text-gray-400">
+                <p>123 Rue de la Paix</p>
+                <p>75000 Paris, France</p>
+                <p className="mt-2">contact@recruplus.com</p>
+                <p>+33 1 23 45 67 89</p>
+              </address>
+            </div>
+          </div>
+          <div className="border-t border-gray-800 mt-12 pt-8 text-center text-gray-400 text-sm">
+            <p> 2023 RecruPlus. Tous droits réservés.</p>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 };

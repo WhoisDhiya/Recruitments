@@ -46,6 +46,17 @@ export interface Offer {
   date_expiration?: string;
   requirements?: Requirement[];
   recruiter?: Recruiter;
+  // Additional properties used in FindJobsList and JobApplicationPage
+  description?: string;
+  location?: string;
+  company_name?: string;
+  employment_type?: string;
+  education_level?: string;
+  job_level?: string;
+  salary_min?: number;
+  salary_max?: number;
+  category?: string;
+  created_at?: string;
 }
 
 // Types pour les exigences d'offre
@@ -97,6 +108,7 @@ export interface NavigationItem {
   id: string;
   label: string;
   active?: boolean;
+  path?: string;
 }
 
 // Types pour les éléments de la sidebar
@@ -153,7 +165,7 @@ export interface SignInProps {
 }
 
 // Types pour les états
-export type ActiveTab = 'Home' | 'Overview' | 'Applied_Jobs' | 'Favorite_Jobs' | 'Job_Alert' | 'Settings';
+export type ActiveTab = 'Home' | 'Overview' | 'Applied_Jobs' | 'Saved_Jobs' | 'Job_Alert' | 'Settings';
 export type RecruiterActiveTab = 'Overview' | 'Employers_Profile' | 'Post_a_Job' | 'My_Jobs' | 'Saved_Candidate' | 'Plans_Billing' | 'All_Companies' | 'Settings';
 export type UserRole = 'recruiter' | 'candidate' | 'admin';
 export type ApplicationStatus = 'pending' | 'reviewed' | 'accepted' | 'rejected';

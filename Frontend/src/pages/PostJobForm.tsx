@@ -240,7 +240,17 @@ const PostJobForm: React.FC<PostJobFormProps> = ({ user, onLogout, editJobId, on
         }
       } else {
         const result = await apiService.createOfferForRecruiter(recruiterId, offerData);
-        alert(result.message || 'Job posted successfully!');
+        // Show backend message if present
+        if (result.message) {
+          alert(result.message);
+        }
+
+        // If backend returned warnings (e.g. missing subscription), show them but allow creation
+        const warnings = result.data?.warnings;
+        if (warnings && warnings.length > 0) {
+          alert(warnings.join('\n'));
+        }
+
         if (onSuccess) {
           onSuccess({ mode: 'create' });
         } else {

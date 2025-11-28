@@ -3,7 +3,20 @@ const express = require('express');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const db = require('./config/database');
-const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+
+// Stripe / Payments are optional and can be disabled during development
+let stripe = null;
+if (process.env.DISABLE_PAYMENTS !== 'true') {
+    try {
+        stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+        console.log('Payments enabled: Stripe initialized');
+    } catch (err) {
+        console.warn('Stripe not initialized:', err && err.message ? err.message : err);
+        stripe = null;
+    }
+} else {
+    console.log('Payments disabled via DISABLE_PAYMENTS=true');
+}
 
 
 
@@ -42,7 +55,15 @@ app.use('/api/auth', authRoutes);
 app.use('/api/candidates', candidateRoutes);
 app.use('/api/recruiters', recruiterRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/payments', paymentRoutes);
+// Mount payment routes only when payments are enabled
+if (process.env.DISABLE_PAYMENTS !== 'true') {
+    app.use('/api/payments', paymentRoutes);
+} else {
+    // Optional: expose a small endpoint to indicate payments are disabled
+    app.use('/api/payments', (req, res) => {
+        res.status(503).json({ status: 'UNAVAILABLE', message: 'Payments are temporarily disabled' });
+    });
+}
 
 // Appliquer le rate limiter uniquement sur la création d'offres
 app.use('/api/recruiters/:recruiterId/offers', offerLimiter);

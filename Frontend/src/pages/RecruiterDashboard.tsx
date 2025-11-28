@@ -53,6 +53,7 @@ const RecruiterDashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
   const [candidateApplications, setCandidateApplications] = useState<CandidateSummary[]>([]);
   const [savedCandidates, setSavedCandidates] = useState<SavedCandidate[]>([]);
   const [recruiterId, setRecruiterId] = useState<number | null>(null);
+  const [paymentsEnabled, setPaymentsEnabled] = useState<boolean>(true);
 
   const navigationItems = useMemo(
     () => [
@@ -66,20 +67,22 @@ const RecruiterDashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
     []
   );
 
-  const sidebarItems = useMemo(
-    () => [
+  const sidebarItems = useMemo(() => {
+    const base = [
       { id: 'Overview', label: 'Overview', icon: '📊' },
       { id: 'Employers_Profile', label: 'Employer Profile', icon: '👤' },
       { id: 'Find_Candidate', label: 'Find Candidates', icon: '🕵️' },
       { id: 'Post_a_Job', label: 'Post a Job', icon: '➕' },
       { id: 'My_Jobs', label: 'My Jobs', icon: '💼' },
       { id: 'Saved_Candidate', label: 'Saved Candidate', icon: '⭐' },
-      { id: 'Plans_Billing', label: 'Plans & Billing', icon: '💳' },
       { id: 'All_Companies', label: 'All Companies', icon: '🏢' },
       { id: 'Settings', label: 'Settings', icon: '⚙️' }
-    ],
-    []
-  );
+    ];
+    if (paymentsEnabled) {
+      base.splice(6, 0, { id: 'Plans_Billing', label: 'Plans & Billing', icon: '💳' });
+    }
+    return base;
+  }, [paymentsEnabled]);
 
   const savedCandidatesKey = recruiterId ? `savedCandidates:${recruiterId}` : null;
 
@@ -109,6 +112,14 @@ const RecruiterDashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
         setIsLoading(false);
         setIsLoadingCandidates(false);
         return;
+      }
+
+      // Check payments availability (backend returns 503 when disabled)
+      try {
+        const status = await apiService.getPaymentsStatus();
+        setPaymentsEnabled(!!status.available);
+      } catch (err) {
+        setPaymentsEnabled(false);
       }
 
       const offers = await apiService.getRecruiterOffers(recruiterIdentifier);

@@ -16,46 +16,58 @@ exports.createOfferForRecruiter = async (req, res) => {
 
         // ==================================================================================
         // 🛑 DÉBUT DE LA VÉRIFICATION DU PACK (LE GENDARME)
+        //    NOTE: Bypass possible en mode dev via la variable d'environnement
+        //    `BYPASS_SUBSCRIPTION_CHECK=true` (ne pas laisser en production)
         // ==================================================================================
 
-        // 1. On cherche l'abonnement ACTIF et la limite du pack (max_offers)
-        const checkSubQuery = `
-            SELECT p.candidate_limit, p.name as pack_name
-            FROM recruiter_subscriptions s
-            JOIN packs p ON s.pack_id = p.id
-            WHERE s.recruiter_id = ? 
-            AND s.status = 'active' 
-            AND s.end_date > NOW()
-            LIMIT 1
-        `;
-        
-        const [subscription] = await db.query(checkSubQuery, [recruiterId]);
+        // If bypass flag set, skip subscription checks entirely (no warnings)
+        const warnings = [];
 
-        // Si aucun abonnement n'est trouvé
-        if (subscription.length === 0) {
-            return res.status(403).json({
-                status: 'ERROR',
-                message: "Vous devez avoir un abonnement actif pour publier une offre."
-            });
-        }
+        if (process.env.BYPASS_SUBSCRIPTION_CHECK === 'true') {
+            console.log('Bypass subscription check: BYPASS_SUBSCRIPTION_CHECK=true — skipping subscription verification');
+            // intentionally skip checking subscriptions so recruiters can post during dev
+        } else {
+            // 1. On cherche l'abonnement ACTIF et la limite du pack (max_offers)
+            const checkSubQuery = `
+                SELECT p.job_limit, p.name as pack_name
+                FROM recruiter_subscriptions s
+                JOIN packs p ON s.pack_id = p.id
+                WHERE s.recruiter_id = ? 
+                AND s.status = 'active' 
+                AND s.end_date > NOW()
+                LIMIT 1
+            `;
+            
+            const [subscription] = await db.query(checkSubQuery, [recruiterId]);
 
-        const limitMax = subscription[0].job_limit; // Ex: 3, 10 ou 999
-        const packName = subscription[0].pack_name;
+            // Si aucun abonnement n'est trouvé
+            if (!subscription || subscription.length === 0) {
+                return res.status(403).json({
+                    status: 'ERROR',
+                    message: "Vous devez avoir un abonnement actif pour publier une offre."
+                });
+            }
 
-        // 2. On compte combien d'offres ce recruteur a DÉJÀ publiées
-        const [countResult] = await db.query(
-            "SELECT COUNT(*) as total FROM offers WHERE recruiter_id = ?", 
-            [recruiterId]
-        );
-        
-        const currentOffers = countResult[0].total;
+            // defensive: if job_limit missing, treat as unlimited (large number)
+            const packName = subscription[0].pack_name;
+            const limitMaxRaw = subscription[0].job_limit;
+            const limitMax = typeof limitMaxRaw === 'number' ? limitMaxRaw : (parseInt(limitMaxRaw, 10) || 999999);
 
-        // 3. Comparaison : Si j'ai déjà atteint ma limite, on bloque !
-        if (currentOffers >= limitMax) {
-            return res.status(403).json({
-                status: 'ERROR',
-                message: `Limite atteinte ! Votre pack '${packName}' autorise ${limitMax} offres. Vous en avez déjà publié ${currentOffers}. Veuillez passer au pack supérieur.`
-            });
+            // 2. On compte combien d'offres ce recruteur a DÉJÀ publiées
+            const [countResult] = await db.query(
+                "SELECT COUNT(*) as total FROM offers WHERE recruiter_id = ?", 
+                [recruiterId]
+            );
+            
+            const currentOffers = countResult[0].total;
+
+            // 3. Comparaison : Si j'ai déjà atteint ma limite, on bloque !
+            if (currentOffers >= limitMax) {
+                return res.status(403).json({
+                    status: 'ERROR',
+                    message: `Limite atteinte ! Votre pack '${packName}' autorise ${limitMax} offres. Vous en avez déjà publié ${currentOffers}. Veuillez passer au pack supérieur.`
+                });
+            }
         }
 
         // ==================================================================================
@@ -122,7 +134,8 @@ exports.createOfferForRecruiter = async (req, res) => {
             message: 'Offre créée avec succès',
             data: {
                 offer: newOffer,
-                requirement: newRequirement
+                requirement: newRequirement,
+                warnings: typeof warnings !== 'undefined' ? warnings : []
             }
         });
 

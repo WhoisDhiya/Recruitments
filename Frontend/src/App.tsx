@@ -14,6 +14,9 @@ import PostJobPage from './pages/PostJobPage.tsx';
 import MyJobs from './pages/MyJobs.tsx';
 import JobDetails from './pages/JobDetails.tsx';
 import EmployerProfile from './pages/EmployerProfile.tsx';
+import FindJobsList from './pages/FindJobsList.tsx';
+import JobApplicationPage from './pages/JobApplicationPage.tsx';
+import SavedJobs from './pages/SavedJobs.tsx';
 
 //Added MyJobs route in App.tsx and imported MyJobs.
 //Updated PostJobPage.tsx sidebar handler so clicking "My Jobs" navigates to /my-jobs.
@@ -103,7 +106,7 @@ function App() {
             isAuthenticated ? (
               user?.role === 'recruiter'
                 ? <RecruiterDashboard onLogout={handleLogout} user={user || undefined} />
-                : <Dashboard onLogout={handleLogout} user={user || undefined} />
+                : <Dashboard onLogout={handleLogout} user={user || undefined} isAuthenticated={isAuthenticated} />
             ) : <Navigate to="/signin" />
           } />
           <Route path="/settings" element={
@@ -128,6 +131,19 @@ function App() {
           <Route path="/employer-profile" element={
             isAuthenticated && user?.role === 'recruiter'
               ? <EmployerProfile onLogout={handleLogout} user={user || undefined} />
+              : <Navigate to="/signin" />
+          } />
+          <Route path="/find-jobs" element={
+            <FindJobsList isAuthenticated={isAuthenticated} user={user || undefined} onLogout={handleLogout} />
+          } />
+          <Route path="/job-application/:jobId" element={
+            isAuthenticated
+              ? <JobApplicationPage user={user || undefined} isAuthenticated={isAuthenticated} onLogout={handleLogout} />
+              : <Navigate to="/signin" />
+          } />
+          <Route path="/saved-jobs" element={
+            isAuthenticated && user?.role === 'candidate'
+              ? <SavedJobs />
               : <Navigate to="/signin" />
           } />
         </Routes>

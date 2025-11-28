@@ -1,195 +1,237 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { apiService } from '../services/api';
+import type { Application, Offer } from '../types';
 import './Dashboard.css';
-import type { ApplicationUI } from '../types';
+
+interface ApplicationWithOffer extends Omit<Application, 'status'> {
+  id: number;
+  offer_id: number;
+  status: 'pending' | 'reviewed' | 'accepted' | 'rejected' | 'interview';
+  applied_at: string;
+  offer: Offer & {
+    company?: string;
+    location?: string;
+    min_salary?: number;
+    max_salary?: number;
+    salary_type?: 'Yearly' | 'Monthly' | 'Hourly';
+    job_type?: string;
+  };
+}
 
 const AppliedJobs: React.FC = () => {
-  // Données des candidatures
-  const recentApplications: ApplicationUI[] = [
-    {
-      id: 1,
-      job: {
-        title: 'Networking Engineer',
-        company: 'Up',
-        location: 'Sousse',
-        salary: '1500-2000 DT/month',
-        type: 'Remote',
-        icon: '📈',
-        iconColor: 'green'
-      },
-      dateApplied: 'Feb 2, 2019 19:28',
-      status: 'Active',
-      action: 'View Details'
-    },
-    {
-      id: 2,
-      job: {
-        title: 'Product Designer',
-        company: 'DesignStudio',
-        location: 'Mahdia',
-        salary: '1500-1800 DT/month',
-        type: 'Full Time',
-        icon: '⚙️',
-        iconColor: 'pink'
-      },
-      dateApplied: 'Dec 7, 2019 23:26',
-      status: 'Active',
-      action: 'View Details'
-    },
-    {
-      id: 3,
-      job: {
-        title: 'Junior Graphic Designer',
-        company: 'Apple Inc',
-        location: 'Monastir',
-        salary: '1400-1800 DT/month',
-        type: 'Temporary',
-        icon: '🍎',
-        iconColor: 'black'
-      },
-      dateApplied: 'Feb 2, 2019 19:28',
-      status: 'Active',
-      action: 'View Details'
-    },
-    {
-      id: 4,
-      job: {
-        title: 'Visual Designer',
-        company: 'Microsoft',
-        location: 'Tunis',
-        salary: '2000-2500 DT/month',
-        type: 'Contract Base',
-        icon: '🪟',
-        iconColor: 'multicolor'
-      },
-      dateApplied: 'Dec 7, 2019 23:26',
-      status: 'Active',
-      action: 'View Details'
-    },
-    {
-      id: 5,
-      job: {
-        title: 'Marketing Officer',
-        company: 'Twitter',
-        location: 'Ben Arous',
-        salary: '1500-1800 DT/month',
-        type: 'Full Time',
-        icon: '🐦',
-        iconColor: 'blue'
-      },
-      dateApplied: 'Dec 4, 2019 21:42',
-      status: 'Active',
-      action: 'View Details'
-    },
-    {
-      id: 6,
-      job: {
-        title: 'UI/UX Designer',
-        company: 'Facebook',
-        location: 'Nabeul',
-        salary: '1500-1800 DT/month',
-        type: 'Full Time',
-        icon: '📘',
-        iconColor: 'blue'
-      },
-      dateApplied: 'Dec 30, 2019 07:52',
-      status: 'Active',
-      action: 'View Details'
-    },
-    {
-      id: 7,
-      job: {
-        title: 'Software Engineer',
-        company: 'Google',
-        location: 'Ariana',
-        salary: '1500-1800 DT/month',
-        type: 'Full Time',
-        icon: '🔍',
-        iconColor: 'multicolor'
-      },
-      dateApplied: 'Dec 30, 2019 05:18',
-      status: 'Active',
-      action: 'View Details'
-    },
-    {
-      id: 8,
-      job: {
-        title: 'Front End Developer',
-        company: 'Reddit',
-        location: 'Sfax',
-        salary: '1500-1800 DT/month',
-        type: 'Full Time',
-        icon: '🔴',
-        iconColor: 'red'
-      },
-      dateApplied: 'Mar 20, 2019 23:14',
-      status: 'Active',
-      action: 'View Details'
+  const navigate = useNavigate();
+  const [applications, setApplications] = useState<ApplicationWithOffer[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchApplications = async () => {
+      try {
+        setLoading(true);
+        const user = apiService.getCurrentUser();
+        
+        if (!user) {
+          throw new Error('User not authenticated');
+        }
+
+        // Récupérer le profil candidat
+        const candidate = await apiService.getCandidateByUserId(user.id);
+        
+        // Récupérer les candidatures du candidat
+        const apps = await apiService.getApplications(candidate.id);
+        
+        // Pour chaque candidature, récupérer les détails de l'offre
+        const appsWithOffers = await Promise.all(
+          apps.map(async (app: any) => {
+            try {
+              const offer = await apiService.getOffer(app.offer_id);
+              return { ...app, offer };
+            } catch (err) {
+              console.error(`Error fetching offer ${app.offer_id}:`, err);
+              return { ...app, offer: null };
+            }
+          })
+        );
+
+        setApplications(appsWithOffers.filter(app => app.offer !== null));
+      } catch (err) {
+        console.error('Error fetching applications:', err);
+        setError('Erreur lors du chargement des candidatures');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchApplications();
+  }, []);
+
+  const formatDate = (dateString: string) => {
+    const options: Intl.DateTimeFormatOptions = { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    };
+    return new Date(dateString).toLocaleDateString('fr-FR', options);
+  };
+
+  const getStatusBadgeClass = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'pending':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'accepted':
+        return 'bg-green-100 text-green-800';
+      case 'rejected':
+        return 'bg-red-100 text-red-800';
+      case 'interview':
+        return 'bg-blue-100 text-blue-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
     }
-  ];
+  };
+
+  const getCompanyIcon = (companyName: string) => {
+    // Simple mapping d'icônes basé sur le nom de l'entreprise
+    const icons: Record<string, string> = {
+      'microsoft': '🪟',
+      'apple': '🍎',
+      'google': '🔍',
+      'facebook': '📘',
+      'twitter': '🐦',
+      'amazon': '📦',
+      'netflix': '🎬',
+      'spotify': '🎵',
+      'adobe': '🎨',
+      'slack': '💬',
+      'zoom': '📹',
+      'linkedin': '💼',
+      'github': '🐙',
+      'gitlab': '🦊',
+      'docker': '🐳',
+      'kubernetes': '☸️'
+    };
+
+    const lowerName = companyName.toLowerCase();
+    for (const [key, icon] of Object.entries(icons)) {
+      if (lowerName.includes(key)) {
+        return icon;
+      }
+    }
+    
+    // Retourne une icône par défaut basée sur la première lettre du nom de l'entreprise
+    return companyName.charAt(0).toUpperCase();
+  };
+
+  const getSalaryRange = (offer: ApplicationWithOffer['offer']) => {
+    if (offer.min_salary !== undefined && offer.max_salary !== undefined) {
+      return `${offer.min_salary} - ${offer.max_salary} DT/${offer.salary_type === 'Yearly' ? 'an' : 'mois'}`;
+    }
+    return 'Salaire non spécifié';
+  };
+
+  if (loading) {
+    return (
+      <div className="dashboard-content">
+        <div className="dashboard-header">
+          <h2>Mes Candidatures</h2>
+          <p>Chargement de vos candidatures en cours...</p>
+        </div>
+        <div className="loading-spinner">
+          <div className="spinner"></div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="dashboard-content">
+        <div className="dashboard-header">
+          <h2>Mes Candidatures</h2>
+          <p>Une erreur est survenue</p>
+        </div>
+        <div className="error-message">
+          <p>{error}</p>
+          <button onClick={() => window.location.reload()} className="btn btn-primary">
+            Réessayer
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (applications.length === 0) {
+    return (
+      <div className="dashboard-content">
+        <div className="dashboard-header">
+          <h2>Mes Candidatures</h2>
+          <p>Vous n'avez encore postulé à aucune offre</p>
+        </div>
+        <div className="no-applications">
+          <p>Parcourez les offres disponibles et postulez pour commencer votre recherche d'emploi !</p>
+          <button 
+            onClick={() => navigate('/find-jobs')} 
+            className="btn btn-primary"
+          >
+            Voir les offres disponibles
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="applied-jobs-section">
-      <div className="section-header">
-        <h1 className="section-title">Applied Jobs (589)</h1>
+    <div className="dashboard-content">
+      <div className="dashboard-header">
+        <h2>Mes Candidatures</h2>
+        <p>Voici les offres auxquelles vous avez postulé</p>
       </div>
-      
-      <div className="applications-table">
-        <div className="table-header">
-          <div className="table-cell">JOBS</div>
-          <div className="table-cell">DATE APPLIED</div>
-          <div className="table-cell">STATUS</div>
-          <div className="table-cell">ACTION</div>
-        </div>
-        
-        {recentApplications.map(application => (
-          <div key={application.id} className="table-row">
-            <div className="table-cell job-cell">
-              <div className="job-info">
-                <div className="job-icon-container">
-                  <span className={`job-icon ${application.job.iconColor}`}>
-                    {application.job.icon}
-                  </span>
-                  <span className={`trend-icon ${application.job.iconColor}`}>↗️</span>
-                </div>
-                <div className="job-details">
-                  <div className="job-title">{application.job.title}</div>
-                  <div className="job-company">{application.job.company}</div>
-                  <div className="job-meta">
-                    <span className="job-type">{application.job.type}</span>
-                    <span className="job-location">{application.job.location}</span>
-                    <span className="job-salary">{application.job.salary}</span>
-                  </div>
+
+      <div className="applications-container">
+        {applications.map((application) => (
+          <div key={application.id} className="application-card">
+            <div className="application-header">
+              <div className="application-company">
+                <span className="company-icon">
+                  {getCompanyIcon(application.offer.company || '')}
+                </span>
+                <div>
+                  <h3>{application.offer.title}</h3>
+                  <p>{application.offer.company || 'Entreprise non spécifiée'} • {application.offer.location || 'Lieu non spécifié'}</p>
                 </div>
               </div>
+              <span className="application-salary">
+                {getSalaryRange(application.offer as any)}
+              </span>
             </div>
             
-            <div className="table-cell date-cell">
-              {application.dateApplied}
+            <div className="application-details">
+              <span className="job-type">
+                {application.offer.job_type || 'Type de contrat non spécifié'}
+              </span>
+              <span className="application-date">
+                Postulé le {formatDate(application.applied_at || new Date().toISOString())}
+              </span>
             </div>
             
-            <div className="table-cell status-cell">
-              <span className="status-badge">✓ {application.status}</span>
-            </div>
-            
-            <div className="table-cell action-cell">
-              <button className="action-button">
-                {application.action}
+            <div className="application-actions">
+              <span className={`status-badge ${getStatusBadgeClass(application.status || 'pending')}`}>
+                {application.status || 'En attente'}
+              </span>
+              <button 
+                className="view-details-btn"
+                onClick={() => application.offer_id && navigate(`/job-application/${application.offer_id}`)}
+              >
+                Voir les détails
               </button>
             </div>
           </div>
         ))}
       </div>
       
-      {/* Pagination */}
-      <div className="pagination">
-        <button className="pagination-btn">←</button>
-        <button className="pagination-btn active">01</button>
-        <button className="pagination-btn">02</button>
-        <button className="pagination-btn">03</button>
-        <button className="pagination-btn">04</button>
-        <button className="pagination-btn">05</button>
-        <button className="pagination-btn">→</button>
-      </div>
     </div>
   );
 };

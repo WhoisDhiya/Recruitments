@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
-// import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import './Dashboard.css';
 import AppliedJobs from './AppliedJobs';
 import Settings from './Settings';
-import Homepage from './homepage';
 import type { 
   DashboardProps, 
   NavigationItem, 
@@ -11,22 +10,26 @@ import type {
   SummaryCard, 
   Country, 
   ApplicationUI, 
-  ActiveTab
+  ActiveTab,
+  Offer
 } from '../types';
-import { apiService } from '../services/api';
-const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
-  // navigate not needed here because Home uses internal tab switching
+interface DashboardPropsExtended extends DashboardProps {
+  isAuthenticated: boolean;
+}
+
+const Dashboard: React.FC<DashboardPropsExtended> = ({ onLogout, user }) => {
+  const navigate = useNavigate();
   
-  const [activeTab, setActiveTab] = useState<ActiveTab>('Overview');
+  const [activeTab, setActiveTab] = useState<ActiveTab | string>('Overview');
   const [selectedCountry, setSelectedCountry] = useState<string>('Tunisia');
   const [isCountryDropdownOpen, setIsCountryDropdownOpen] = useState<boolean>(false);
   const [summaryStats, setSummaryStats] = useState<{
     appliedJobs: number;
-    favoriteJobs: number;
+    savedJobs: number;
     jobAlerts: number;
   }>({
     appliedJobs: 0,
-    favoriteJobs: 0,
+    savedJobs: 0,
     jobAlerts: 0
   });
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -60,8 +63,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
   useEffect(() => {
     const loadDashboardStats = async () => {
       try {
-        const stats = await apiService.getDashboardStats();
-        setSummaryStats(stats);
+        // Simuler des statistiques pour le moment
+        setSummaryStats({
+          appliedJobs: 5,
+          savedJobs: 3,
+          jobAlerts: 2
+        });
       } catch (error) {
         console.error('Erreur lors du chargement des statistiques:', error);
       } finally {
@@ -81,24 +88,109 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
 
   const navigationItems: NavigationItem[] = [
     { id: 'Home', label: 'Home' },
-    { id: 'Find_Job', label: 'Find Job' },
+    { id: 'Find_Job', label: 'Find Job', path: '/find-jobs' },
     { id: 'Find_Employers', label: 'Find Employers' },
     { id: 'Dashboard', label: 'Dashboard', active: true },
     { id: 'Job_Alerts', label: 'Job Alerts' },
     { id: 'Customer_Supports', label: 'Customer Supports' }
   ];
 
+  // État pour les emplois sauvegardés
+  const [savedJobs, setSavedJobs] = useState<Offer[]>([]);
+  
+  // Fonction pour charger les emplois sauvegardés
+  const loadSavedJobs = async () => {
+    if (user?.id) {
+      try {
+        // Données de démonstration
+        const demoJobs: Offer[] = [
+          {
+            id: 1,
+            recruiter_id: 1,
+            title: 'Développeur Full Stack',
+            date_offer: new Date().toISOString(),
+            description: 'Description du poste de développeur Full Stack',
+            location: 'Tunis',
+            company_name: 'TechCorp',
+            employment_type: 'Temps plein',
+            salary_min: 3000,
+            salary_max: 4000,
+            category: 'Développement',
+            requirements: []
+          },
+          {
+            id: 2,
+            recruiter_id: 2,
+            title: 'Designer UX/UI',
+            date_offer: new Date().toISOString(),
+            description: 'Description du poste de Designer UX/UI',
+            location: 'Sousse',
+            company_name: 'DesignHub',
+            employment_type: 'Temps plein',
+            salary_min: 2500,
+            salary_max: 3500,
+            category: 'Design',
+            requirements: []
+          }
+        ];
+        
+        setSavedJobs(demoJobs);
+      } catch (error) {
+        console.error('Erreur lors du chargement des emplois sauvegardés:', error);
+      }
+    }
+  };
+  
+  // Charger les emplois sauvegardés au chargement du composant
+  useEffect(() => {
+    loadSavedJobs();
+  }, [user]);
+
+  const handleSidebarClick = (id: string) => {
+    console.log('Sidebar item clicked:', id);
+    
+    // Mettre à jour l'onglet actif
+    setActiveTab(id as ActiveTab);
+    
+    // Si c'est Saved_Jobs, charger les emplois sauvegardés
+    if (id === 'Saved_Jobs') {
+      loadSavedJobs();
+    }
+  };
+  
+  // Fonction pour afficher les détails d'un emploi
+  const handleViewJobDetails = (jobId: number) => {
+    navigate(`/job-details/${jobId}`);
+  };
+  
+  // Fonction pour retirer un emploi des favoris
+  const handleUnsaveJob = async (jobId: number) => {
+    try {
+      // Remplacer par un appel API réel
+      // await apiService.unsaveJob(jobId);
+      setSavedJobs(prevJobs => prevJobs.filter(job => job.id !== jobId));
+      
+      // Mettre à jour le compteur dans les cartes de résumé
+      setSummaryStats(prev => ({
+        ...prev,
+        savedJobs: prev.savedJobs - 1
+      }));
+    } catch (error) {
+      console.error('Erreur lors de la suppression de l\'emploi sauvegardé:', error);
+    }
+  };
+
   const sidebarItems: SidebarItem[] = [
     { id: 'Overview', label: 'Overview', icon: '📊' },
     { id: 'Applied_Jobs', label: 'Applied Jobs', icon: '💼' },
-    { id: 'Favorite_Jobs', label: 'Favorite Jobs', icon: '🔖' },
+    { id: 'Saved_Jobs', label: 'Saved Jobs', icon: '💾' },
     { id: 'Job_Alert', label: 'Job Alert', icon: '🔔', badge: '09' },
     { id: 'Settings', label: 'Settings', icon: '⚙️' }
   ];
 
   const summaryCards: SummaryCard[] = [
     { title: 'Applied jobs', count: summaryStats.appliedJobs.toString(), icon: '💼', color: 'blue' },
-    { title: 'Favorite jobs', count: summaryStats.favoriteJobs.toString(), icon: '🔖', color: 'yellow' },
+    { title: 'Saved jobs', count: savedJobs.length.toString(), icon: '💾', color: 'yellow' },
     { title: 'Job Alerts', count: summaryStats.jobAlerts.toString(), icon: '🔔', color: 'green' }
   ];
 
@@ -183,11 +275,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
                 onClick={(e) => {
                   e.preventDefault();
                   if (item.id === 'Home') {
-                    // Keep dashboard layout and show the public Homepage inside the dashboard
-                    setActiveTab('Home');
+                    navigate('/');
+                    return;
                   } else if (item.id === 'Dashboard') {
-                    // Return to the dashboard overview (main dashboard content)
                     setActiveTab('Overview');
+                  } else if (item.id === 'Find_Job') {
+                    navigate('/find-jobs');
                   }
                 }}
               >
@@ -255,31 +348,29 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
       </header>
 
       <div className="dashboard-content">
-        {/* Sidebar */}
-        <aside className="dashboard-sidebar">
-          <h3 className="sidebar-title">CANDIDATE DASHBOARD</h3>
-          <nav className="sidebar-nav">
-                {sidebarItems.map(item => (
-              <a 
-                key={item.id}
-                href="#" 
-                className={`sidebar-link ${activeTab === item.id ? 'active' : ''}`}
-                onClick={(e) => {
-                  e.preventDefault();
-                      if (item.id === 'Settings') {
-                        // Open settings inside the dashboard layout so navbar/sidebar remain visible
-                        setActiveTab('Settings');
-                      } else {
-                        setActiveTab(item.id as ActiveTab);
-                      }
-                }}
-              >
-                <span className="sidebar-icon">{item.icon}</span>
-                <span className="sidebar-label">{item.label}</span>
-                {item.badge && <span className="badge">{item.badge}</span>}
-              </a>
+      {/* Sidebar */}
+      <aside className="dashboard-sidebar">
+        <h3 className="sidebar-title">CANDIDATE DASHBOARD</h3>
+        <nav className="sidebar-nav">
+          <ul>
+            {sidebarItems.map((item) => (
+              <li key={item.id}>
+                <a
+                  href="#"
+                  className={`sidebar-link ${activeTab === item.id ? 'active' : ''}`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleSidebarClick(item.id);
+                  }}
+                >
+                  <span className="sidebar-icon">{item.icon}</span>
+                  <span className="sidebar-label">{item.label}</span>
+                  {item.badge && <span className="badge">{item.badge}</span>}
+                </a>
+              </li>
             ))}
-          </nav>
+          </ul>
+        </nav>
           <div className="logout-section">
             <button 
               onClick={onLogout}
@@ -294,9 +385,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
 
         {/* Main Content */}
         <main className="dashboard-main">
-          {activeTab === 'Home' && (
-            <Homepage />
-          )}
+          {/* La page d'accueil est maintenant gérée par la route racine */}
 
           {activeTab === 'Overview' && (
             <>
@@ -382,6 +471,63 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
 
           {activeTab === 'Settings' && (
             <Settings user={user} />
+          )}
+          
+          {activeTab === 'Saved_Jobs' && (
+            <div className="saved-jobs-section">
+              <div className="section-header">
+                <h2 className="section-title">Emplois Sauvegardés</h2>
+              </div>
+              
+              {savedJobs.length > 0 ? (
+                <div className="jobs-grid">
+                  {savedJobs.map(job => (
+                    <div key={job.id} className="job-card">
+                      <div className="job-card-header">
+                        <div className="job-company-icon">
+                          {job.title ? job.title.substring(0, 1).toUpperCase() : 'J'}
+                        </div>
+                        <div className="job-card-title-section">
+                          <h3 className="job-title">{job.title}</h3>
+                          <p className="job-company">{job.company_name || 'Entreprise non spécifiée'}</p>
+                        </div>
+                      </div>
+                      <div className="job-card-body">
+                        <div className="job-meta">
+                          <span className="job-location">📍 {job.location}</span>
+                          <span className="job-salary">💰 {job.salary_min} - {job.salary_max} DT</span>
+                          <span className="job-type">🏢 {job.employment_type}</span>
+                        </div>
+                        <div className="job-actions">
+                          <button 
+                            className="action-button"
+                            onClick={() => handleViewJobDetails(job.id)}
+                          >
+                            Voir les détails
+                          </button>
+                          <button 
+                            className="action-button secondary"
+                            onClick={() => handleUnsaveJob(job.id)}
+                          >
+                            Retirer
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="no-jobs-message">
+                  <p>Vous n'avez aucun emploi sauvegardé pour le moment.</p>
+                  <button 
+                    className="browse-jobs-button"
+                    onClick={() => navigate('/find-jobs')}
+                  >
+                    Parcourir les offres d'emploi
+                  </button>
+                </div>
+              )}
+            </div>
           )}
         </main>
       </div>

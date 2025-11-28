@@ -88,6 +88,21 @@ class ApiService {
     return res.json();
   }
 
+  // ===== PAYMENTS STATUS =====
+  async getPaymentsStatus(): Promise<{ available: boolean; message?: string }> {
+    // The backend exposes /api/payments which returns 503 when payments are disabled
+    const url = `${API_BASE_URL}/payments`;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        return { available: false, message: 'Payments disabled' };
+      }
+      return { available: true };
+    } catch (err) {
+      return { available: false, message: 'Payments unavailable' };
+    }
+  }
+
   // ===== OFFERS =====
   async getOffers(): Promise<Offer[]> {
     const response = await this.request<Offer[]>('/offers');
@@ -127,12 +142,13 @@ class ApiService {
       description?: string;
       responsibilities?: string;
     }
-  ): Promise<{ message: string; data?: { offer: Offer; requirement: any } }> {
-    const response = await this.request<{ message: string; data?: { offer: Offer; requirement: any } }>(
+  ): Promise<{ message?: string; data?: { offer: Offer; requirement: any; warnings?: string[] } } & { success?: boolean } > {
+    const response = await this.request<{ offer?: Offer; requirement?: any; warnings?: string[] }>(
       `/recruiters/${recruiterId}/offers`,
       { method: 'POST', body: JSON.stringify(offerData) }
     );
-    return response.data!;
+    // Return the full response (message + data) so caller can access warnings and message
+    return { message: response.message, data: response.data, success: response.success };
   }
 
   async updateOffer(
@@ -198,6 +214,23 @@ class ApiService {
     const response = await this.request<{ message: string }>(`/applications/${applicationId}/status`, {
       method: 'PUT',
       body: JSON.stringify({ status }),
+    });
+    return response.data!;
+  }
+
+  // ===== CANDIDATE PROFILE =====
+  async getCandidateByUserId(userId: number): Promise<{ id: number; user_id: number; [key: string]: any }> {
+    const response = await this.request<{ id: number; user_id: number; [key: string]: any }>(`/candidates/user/${userId}`);
+    return response.data!;
+  }
+
+  async updateCandidateProfile(
+    candidateId: number,
+    payload: Partial<{ oldPassword: string; newPassword: string; cv: string; image: string }>
+  ): Promise<{ message: string; data?: any }> {
+    const response = await this.request<{ message: string; data?: any }>(`/candidates/${candidateId}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
     });
     return response.data!;
   }
