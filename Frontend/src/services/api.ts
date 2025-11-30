@@ -19,8 +19,9 @@ class ApiService {
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<ApiResponse<T>> {
     const url = `${API_BASE_URL}${endpoint}`;
-    const token = this.token || localStorage.getItem('token');
-    if (token && !this.token) this.token = token;
+    // Toujours récupérer le token depuis localStorage (pour gérer les refreshes de page)
+    const token = localStorage.getItem('token') || this.token;
+    if (token) this.token = token; // Mettre à jour this.token si on le récupère de localStorage
 
     const config: RequestInit = {
       headers: {
@@ -48,19 +49,44 @@ class ApiService {
 
   // ===== AUTH =====
   async login(credentials: LoginRequest): Promise<LoginResponse> {
-    const response = await this.request<LoginResponse>('/auth/login', {
+    // Faire la requête directement pour éviter la transformation par request()
+    const url = `${API_BASE_URL}/auth/login`;
+    const response = await fetch(url, {
       method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify(credentials),
     });
-    if (response.success && response.data) {
-      this.token = response.data.token;
-      localStorage.setItem('token', this.token);
-      localStorage.setItem('user', JSON.stringify(response.data.user));
+    
+    const data = await response.json();
+    console.log('🔐 Login response:', data);
+    
+    if (!response.ok) {
+      throw new Error(data.message || 'Login failed');
     }
-    return response.data!;
+    
+    // Le backend retourne { status: 'SUCCESS', message: '...', data: { user: {...}, token: '...' } }
+    if (data.status === 'SUCCESS' && data.data) {
+      const { token, user } = data.data;
+      if (token && user) {
+        this.token = token;
+        localStorage.setItem('token', token);
+        localStorage.setItem('user', JSON.stringify(user));
+        console.log('✅ Token and user saved to localStorage:', { tokenLength: token.length, userEmail: user.email });
+        return { user, token };
+      } else {
+        console.error('❌ Missing token or user in response.data:', data.data);
+        throw new Error('Invalid login response: missing token or user');
+      }
+    } else {
+      console.error('❌ Login failed or invalid response:', data);
+      throw new Error(data.message || 'Login failed');
+    }
   }
 
   logout(): void {
+    console.log('🚪 LOGOUT called - clearing token and user');
     this.token = null;
     localStorage.removeItem('token');
     localStorage.removeItem('user');
@@ -74,11 +100,19 @@ class ApiService {
   isAuthenticated(): boolean {
     const storedToken = localStorage.getItem('token');
     const storedUser = localStorage.getItem('user');
+    console.log('🔍 isAuthenticated check:', { 
+      hasToken: !!storedToken, 
+      hasUser: !!storedUser,
+      tokenLength: storedToken?.length || 0
+    });
+    
     if (!storedToken || !storedUser) {
       this.token = null;
+      console.log('❌ Not authenticated: missing token or user');
       return false;
     }
     this.token = storedToken;
+    console.log('✅ Authenticated: token and user found');
     return true;
   }
 
@@ -110,13 +144,75 @@ class ApiService {
   }
 
   async getOffer(id: number): Promise<Offer> {
-    const response = await this.request<Offer>(`/offers/${id}`);
-    return response.data!;
+    // Le backend retourne { status: 'SUCCESS', data: { offer: {...}, requirement: {...} } }
+    const url = `${API_BASE_URL}/offers/${id}`;
+    const token = localStorage.getItem('token') || this.token;
+    if (token) this.token = token;
+    
+    const response = await fetch(url, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.message || 'Failed to fetch offer');
+    }
+    
+    // Le backend retourne { status: 'SUCCESS', data: { offer: {...}, requirement: {...} } }
+    if (data.status === 'SUCCESS' && data.data && data.data.offer) {
+      // Enrichir l'offre avec les données du requirement si disponible
+      const offer = data.data.offer;
+      const requirement = data.data.requirement;
+      
+      if (requirement) {
+        return {
+          ...offer,
+          description: requirement.description || offer.description,
+          location: requirement.location || offer.location,
+          employment_type: requirement.jobType || offer.employment_type,
+          // Ajouter les deux formats pour compatibilité
+          salary_min: requirement.minSalary || offer.salary_min,
+          salary_max: requirement.maxSalary || offer.salary_max,
+          min_salary: requirement.minSalary || offer.min_salary || offer.salary_min,
+          max_salary: requirement.maxSalary || offer.max_salary || offer.salary_max,
+          salary_type: requirement.salaryType || offer.salary_type,
+          job_level: requirement.jobLevel || offer.job_level,
+          education_level: requirement.education || offer.education_level,
+        };
+      }
+      return offer;
+    }
+    throw new Error('Invalid response format');
   }
 
   async getJobDetails(id: number): Promise<{ offer: Offer; requirement: any }> {
-    const response = await this.request<{ offer: Offer; requirement: any }>(`/offers/${id}`);
-    return response.data!;
+    // Le backend retourne { status: 'SUCCESS', data: { offer: {...}, requirement: {...} } }
+    const url = `${API_BASE_URL}/offers/${id}`;
+    const token = localStorage.getItem('token') || this.token;
+    if (token) this.token = token;
+    
+    const response = await fetch(url, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.message || 'Failed to fetch job details');
+    }
+    
+    // Le backend retourne { status: 'SUCCESS', data: { offer: {...}, requirement: {...} } }
+    if (data.status === 'SUCCESS' && data.data) {
+      return data.data;
+    }
+    throw new Error('Invalid response format');
   }
 
   async createOfferForRecruiter(
@@ -199,8 +295,29 @@ class ApiService {
 
   // ===== APPLICATIONS =====
   async getApplications(candidateId: number): Promise<Application[]> {
-    const response = await this.request<Application[]>(`/applications/candidate/${candidateId}`);
-    return response.data || [];
+    // Faire la requête directement car le backend retourne { status: 'SUCCESS', data: [...] }
+    const url = `${API_BASE_URL}/candidates/${candidateId}/applications`;
+    const token = localStorage.getItem('token') || this.token;
+    if (token) this.token = token;
+    
+    const response = await fetch(url, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.message || 'Failed to fetch applications');
+    }
+    
+    // Le backend retourne { status: 'SUCCESS', data: [...] }
+    if (data.status === 'SUCCESS' && data.data) {
+      return data.data;
+    }
+    return [];
   }
 
   async createApplication(offerId: number): Promise<{ id: number; message: string }> {
@@ -226,19 +343,60 @@ class ApiService {
 
   // ===== CANDIDATE PROFILE =====
   async getCandidateByUserId(userId: number): Promise<{ id: number; user_id: number; [key: string]: any }> {
-    const response = await this.request<{ id: number; user_id: number; [key: string]: any }>(`/candidates/user/${userId}`);
-    return response.data!;
+    // La route backend est /candidates/profile/user/:userId
+    const url = `${API_BASE_URL}/candidates/profile/user/${userId}`;
+    const token = localStorage.getItem('token') || this.token;
+    if (token) this.token = token;
+    
+    const response = await fetch(url, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.message || 'Failed to fetch candidate profile');
+    }
+    
+    // Le backend retourne { status: 'SUCCESS', data: {...} }
+    if (data.status === 'SUCCESS' && data.data) {
+      return data.data;
+    }
+    throw new Error('Invalid response format');
   }
 
   async updateCandidateProfile(
     candidateId: number,
     payload: Partial<{ oldPassword: string; newPassword: string; cv: string; image: string }>
   ): Promise<{ message: string; data?: any }> {
-    const response = await this.request<{ message: string; data?: any }>(`/candidates/${candidateId}`, {
+    // La route backend est /candidates/profile/:candidateId
+    const url = `${API_BASE_URL}/candidates/profile/${candidateId}`;
+    const token = localStorage.getItem('token') || this.token;
+    if (token) this.token = token;
+    
+    const response = await fetch(url, {
       method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
       body: JSON.stringify(payload),
     });
-    return response.data!;
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.message || 'Failed to update candidate profile');
+    }
+    
+    // Le backend retourne { status: 'SUCCESS', message: '...' }
+    if (data.status === 'SUCCESS') {
+      return { message: data.message || 'Candidate profile updated successfully', data: data.data };
+    }
+    throw new Error(data.message || 'Failed to update candidate profile');
   }
 
   // ===== RECRUITER PROFILE =====
@@ -262,57 +420,306 @@ class ApiService {
     userId: number,
     payload: Partial<{ first_name: string; last_name: string; email: string; oldPassword: string; newPassword: string }>
   ): Promise<{ message: string; data?: any }> {
-    const response = await this.request<{ message: string; data?: any }>(`/auth/users/${userId}/profile`, {
+    const url = `${API_BASE_URL}/auth/users/${userId}/profile`;
+    const token = localStorage.getItem('token') || this.token;
+    if (token) this.token = token;
+    
+    const response = await fetch(url, {
       method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
       body: JSON.stringify(payload),
     });
-    return response.data!;
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.message || 'Failed to update user profile');
+    }
+    
+    // Le backend retourne { status: 'SUCCESS', message: '...', data: {...} }
+    if (data.status === 'SUCCESS') {
+      return { message: data.message || 'Profile updated successfully', data: data.data };
+    }
+    throw new Error(data.message || 'Failed to update user profile');
   }
 
   // ===== NOTIFICATIONS =====
   async getNotifications(): Promise<Notification[]> {
-    const response = await this.request<Notification[]>('/notifications');
-    return response.data || [];
+    // Le backend retourne { status: 'SUCCESS', data: [...] }
+    const url = `${API_BASE_URL}/notifications`;
+    const token = localStorage.getItem('token') || this.token;
+    if (token) this.token = token;
+    
+    const response = await fetch(url, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.message || 'Failed to fetch notifications');
+    }
+    
+    // Le backend retourne { status: 'SUCCESS', data: [...] }
+    if (data.status === 'SUCCESS' && data.data) {
+      return data.data;
+    }
+    return [];
+  }
+
+  async getUnreadNotifications(): Promise<Notification[]> {
+    const url = `${API_BASE_URL}/notifications/unread`;
+    const token = localStorage.getItem('token') || this.token;
+    if (token) this.token = token;
+    
+    const response = await fetch(url, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.message || 'Failed to fetch unread notifications');
+    }
+    
+    if (data.status === 'SUCCESS' && data.data) {
+      return data.data;
+    }
+    return [];
+  }
+
+  async getUnreadNotificationsCount(): Promise<number> {
+    const url = `${API_BASE_URL}/notifications/unread/count`;
+    const token = localStorage.getItem('token') || this.token;
+    if (token) this.token = token;
+    
+    const response = await fetch(url, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      return 0;
+    }
+    
+    if (data.status === 'SUCCESS' && data.data) {
+      return data.data.unreadCount || 0;
+    }
+    return 0;
   }
 
   async markNotificationAsRead(notificationId: number): Promise<{ message: string }> {
-    const response = await this.request<{ message: string }>(`/notifications/${notificationId}/read`, {
+    const url = `${API_BASE_URL}/notifications/${notificationId}/read`;
+    const token = localStorage.getItem('token') || this.token;
+    if (token) this.token = token;
+    
+    const response = await fetch(url, {
       method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
     });
-    return response.data!;
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.message || 'Failed to mark notification as read');
+    }
+    
+    if (data.status === 'SUCCESS') {
+      return { message: data.message || 'Notification marked as read' };
+    }
+    throw new Error(data.message || 'Failed to mark notification as read');
+  }
+
+  async markAllNotificationsAsRead(): Promise<{ message: string }> {
+    const url = `${API_BASE_URL}/notifications/read-all`;
+    const token = localStorage.getItem('token') || this.token;
+    if (token) this.token = token;
+    
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.message || 'Failed to mark all notifications as read');
+    }
+    
+    if (data.status === 'SUCCESS') {
+      return { message: data.message || 'All notifications marked as read' };
+    }
+    throw new Error(data.message || 'Failed to mark all notifications as read');
+  }
+
+  async deleteNotification(notificationId: number): Promise<{ message: string }> {
+    const url = `${API_BASE_URL}/notifications/${notificationId}`;
+    const token = localStorage.getItem('token') || this.token;
+    if (token) this.token = token;
+    
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.message || 'Failed to delete notification');
+    }
+    
+    if (data.status === 'SUCCESS') {
+      return { message: data.message || 'Notification deleted' };
+    }
+    throw new Error(data.message || 'Failed to delete notification');
   }
 
   // ===== SAVED JOBS =====
   async getSavedJobs(): Promise<Offer[]> {
-    // TODO: Replace with real API endpoint when backend implements saved jobs
-    // const response = await this.request<Offer[]>('/candidates/saved-jobs');
-    // return response.data || [];
+    // Le backend retourne { status: 'SUCCESS', data: [...] }
+    const url = `${API_BASE_URL}/saved-jobs`;
+    const token = localStorage.getItem('token') || this.token;
+    if (token) this.token = token;
     
-    // Mock implementation: return empty array for now
+    console.log('📋 Fetching saved jobs from:', url);
+    
+    const response = await fetch(url, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    });
+    
+    const data = await response.json();
+    
+    console.log('📋 Saved jobs response:', data);
+    
+    if (!response.ok) {
+      console.error('❌ Error fetching saved jobs:', data);
+      throw new Error(data.message || 'Failed to fetch saved jobs');
+    }
+    
+    // Le backend retourne { status: 'SUCCESS', data: [...] }
+    if (data.status === 'SUCCESS') {
+      if (data.data && Array.isArray(data.data)) {
+        console.log(`✅ Retrieved ${data.data.length} saved jobs`);
+        if (data.data.length > 0) {
+          console.log('📋 First saved job in response:', data.data[0]);
+        }
+        return data.data;
+      } else {
+        console.warn('⚠️ data.data is not an array:', data.data);
+        return [];
+      }
+    }
+    console.warn('⚠️ Response status is not SUCCESS:', data);
     return [];
   }
 
-  async saveJob(_offerId: number): Promise<{ message: string }> {
-    // TODO: Replace with real API endpoint when backend implements saved jobs
-    // const response = await this.request<{ message: string }>(`/candidates/saved-jobs`, {
-    //   method: 'POST',
-    //   body: JSON.stringify({ offer_id: offerId }),
-    // });
-    // return response.data!;
+  async saveJob(offerId: number): Promise<{ message: string }> {
+    const url = `${API_BASE_URL}/saved-jobs`;
+    const token = localStorage.getItem('token') || this.token;
+    if (token) this.token = token;
     
-    // Mock implementation: just return success
-    return { message: 'Job saved successfully' };
+    console.log('💾 Saving job:', offerId);
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+      body: JSON.stringify({ offer_id: offerId }),
+    });
+    
+    const data = await response.json();
+    
+    console.log('💾 Save job response:', data);
+    
+    if (!response.ok) {
+      console.error('❌ Error saving job:', data);
+      throw new Error(data.message || 'Failed to save job');
+    }
+    
+    // Le backend retourne { status: 'SUCCESS', message: '...' }
+    if (data.status === 'SUCCESS') {
+      console.log('✅ Job saved successfully');
+      return { message: data.message || 'Job saved successfully' };
+    }
+    throw new Error(data.message || 'Failed to save job');
   }
 
-  async unsaveJob(_offerId: number): Promise<{ message: string }> {
-    // TODO: Replace with real API endpoint when backend implements saved jobs
-    // const response = await this.request<{ message: string }>(`/candidates/saved-jobs/${offerId}`, {
-    //   method: 'DELETE',
-    // });
-    // return response.data!;
+  async unsaveJob(offerId: number): Promise<{ message: string }> {
+    // Le backend retourne { status: 'SUCCESS', message: '...' }
+    const url = `${API_BASE_URL}/saved-jobs/${offerId}`;
+    const token = localStorage.getItem('token') || this.token;
+    if (token) this.token = token;
     
-    // Mock implementation: just return success
-    return { message: 'Job removed from saved jobs' };
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.message || 'Failed to unsave job');
+    }
+    
+    if (data.status === 'SUCCESS') {
+      return { message: data.message || 'Job removed from saved jobs' };
+    }
+    throw new Error(data.message || 'Failed to unsave job');
+  }
+
+  // Récupérer les IDs des offres sauvegardées pour vérifier rapidement
+  async getSavedJobIds(): Promise<number[]> {
+    const url = `${API_BASE_URL}/saved-jobs/ids`;
+    const token = localStorage.getItem('token') || this.token;
+    if (token) this.token = token;
+    
+    const response = await fetch(url, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      return [];
+    }
+    
+    if (data.status === 'SUCCESS' && data.data) {
+      return data.data;
+    }
+    return [];
   }
 }
 

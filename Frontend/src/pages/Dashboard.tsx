@@ -3,12 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import './Dashboard.css';
 import AppliedJobs from './AppliedJobs';
 import Settings from './Settings';
+import { apiService } from '../services/api';
 import type { 
   DashboardProps, 
   NavigationItem, 
   SidebarItem, 
   SummaryCard, 
-  Country, 
   ApplicationUI, 
   ActiveTab,
   Offer
@@ -21,8 +21,6 @@ const Dashboard: React.FC<DashboardPropsExtended> = ({ onLogout, user }) => {
   const navigate = useNavigate();
   
   const [activeTab, setActiveTab] = useState<ActiveTab | string>('Overview');
-  const [selectedCountry, setSelectedCountry] = useState<string>('Tunisia');
-  const [isCountryDropdownOpen, setIsCountryDropdownOpen] = useState<boolean>(false);
   const [summaryStats, setSummaryStats] = useState<{
     appliedJobs: number;
     savedJobs: number;
@@ -34,44 +32,20 @@ const Dashboard: React.FC<DashboardPropsExtended> = ({ onLogout, user }) => {
   });
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_isLoading, setIsLoading] = useState<boolean>(true);
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
+  const [recentApplications, setRecentApplications] = useState<ApplicationUI[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 3;
 
-  const countries: Country[] = [
-    { code: 'TN', name: 'Tunisia', flag: '🇹🇳' },
-    { code: 'FR', name: 'France', flag: '🇫🇷' },
-    { code: 'US', name: 'United States', flag: '🇺🇸' },
-    { code: 'CA', name: 'Canada', flag: '🇨🇦' },
-    { code: 'DE', name: 'Germany', flag: '🇩🇪' },
-    { code: 'GB', name: 'United Kingdom', flag: '🇬🇧' },
-    { code: 'IT', name: 'Italy', flag: '🇮🇹' },
-    { code: 'ES', name: 'Spain', flag: '🇪🇸' },
-    { code: 'NL', name: 'Netherlands', flag: '🇳🇱' },
-    { code: 'BE', name: 'Belgium', flag: '🇧🇪' },
-    { code: 'CH', name: 'Switzerland', flag: '🇨🇭' },
-    { code: 'AU', name: 'Australia', flag: '🇦🇺' },
-    { code: 'JP', name: 'Japan', flag: '🇯🇵' },
-    { code: 'SG', name: 'Singapore', flag: '🇸🇬' },
-    { code: 'PS', name: 'Palestine', flag: '🇵🇸' },
-    { code: 'AE', name: 'UAE', flag: '🇦🇪' }
-  ];
-
-  const handleCountrySelect = (countryName: string): void => {
-    setSelectedCountry(countryName);
-    setIsCountryDropdownOpen(false);
-  };
 
   // Charger les statistiques du dashboard
   useEffect(() => {
     const loadDashboardStats = async () => {
       try {
-        // Simuler des statistiques pour le moment
-        setSummaryStats({
-          appliedJobs: 5,
-          savedJobs: 3,
-          jobAlerts: 2
-        });
+        // Les statistiques seront mises à jour par d'autres useEffect
+        setIsLoading(false);
       } catch (error) {
         console.error('Erreur lors du chargement des statistiques:', error);
-      } finally {
         setIsLoading(false);
       }
     };
@@ -83,13 +57,36 @@ const Dashboard: React.FC<DashboardPropsExtended> = ({ onLogout, user }) => {
     }
   }, [user]);
 
+  // Charger le nombre de notifications non lues (Job Alerts)
+  useEffect(() => {
+    const loadUnreadCount = async () => {
+      try {
+        const count = await apiService.getUnreadNotificationsCount();
+        setUnreadNotificationsCount(count);
+        // Mettre à jour le nombre de Job Alerts dans les statistiques
+        setSummaryStats(prev => ({
+          ...prev,
+          jobAlerts: count
+        }));
+      } catch (error) {
+        console.error('Error loading unread notifications count:', error);
+      }
+    };
+    
+    if (user?.role === 'candidate') {
+      loadUnreadCount();
+      // Recharger le compte toutes les 30 secondes
+      const interval = setInterval(loadUnreadCount, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [user]);
+
   // Debug: Afficher l'onglet actif
   console.log('Active tab:', activeTab);
 
   const navigationItems: NavigationItem[] = [
     { id: 'Home', label: 'Home' },
     { id: 'Find_Job', label: 'Find Job', path: '/find-jobs' },
-    { id: 'Find_Employers', label: 'Find Employers' },
     { id: 'Dashboard', label: 'Dashboard', active: true },
     { id: 'Job_Alerts', label: 'Job Alerts' },
     { id: 'Customer_Supports', label: 'Customer Supports' }
@@ -98,51 +95,29 @@ const Dashboard: React.FC<DashboardPropsExtended> = ({ onLogout, user }) => {
   // État pour les emplois sauvegardés
   const [savedJobs, setSavedJobs] = useState<Offer[]>([]);
   
-  // Fonction pour charger les emplois sauvegardés
-  const loadSavedJobs = async () => {
-    if (user?.id) {
-      try {
-        // Données de démonstration
-        const demoJobs: Offer[] = [
-          {
-            id: 1,
-            recruiter_id: 1,
-            title: 'Développeur Full Stack',
-            date_offer: new Date().toISOString(),
-            description: 'Description du poste de développeur Full Stack',
-            location: 'Tunis',
-            company_name: 'TechCorp',
-            employment_type: 'Temps plein',
-            salary_min: 3000,
-            salary_max: 4000,
-            category: 'Développement',
-            requirements: []
-          },
-          {
-            id: 2,
-            recruiter_id: 2,
-            title: 'Designer UX/UI',
-            date_offer: new Date().toISOString(),
-            description: 'Description du poste de Designer UX/UI',
-            location: 'Sousse',
-            company_name: 'DesignHub',
-            employment_type: 'Temps plein',
-            salary_min: 2500,
-            salary_max: 3500,
-            category: 'Design',
-            requirements: []
-          }
-        ];
-        
-        setSavedJobs(demoJobs);
-      } catch (error) {
-        console.error('Erreur lors du chargement des emplois sauvegardés:', error);
-      }
-    }
-  };
-  
   // Charger les emplois sauvegardés au chargement du composant
   useEffect(() => {
+    const loadSavedJobs = async () => {
+      if (user?.role !== 'candidate') {
+        return;
+      }
+
+      try {
+        // Charger les emplois sauvegardés depuis l'API
+        const savedJobsData = await apiService.getSavedJobs();
+        setSavedJobs(savedJobsData || []);
+        
+        // Mettre à jour le nombre de Saved Jobs dans les statistiques
+        setSummaryStats(prev => ({
+          ...prev,
+          savedJobs: savedJobsData?.length || 0
+        }));
+      } catch (error) {
+        console.error('Erreur lors du chargement des emplois sauvegardés:', error);
+        setSavedJobs([]);
+      }
+    };
+
     loadSavedJobs();
   }, [user]);
 
@@ -169,6 +144,12 @@ const Dashboard: React.FC<DashboardPropsExtended> = ({ onLogout, user }) => {
       navigate('/applied-jobs');
       return;
     }
+    
+    // Si c'est Job_Alert, naviguer vers la page Notifications
+    if (id === 'Job_Alert') {
+      navigate('/notifications');
+      return;
+    }
   };
   
   // Fonction pour afficher les détails d'un emploi
@@ -179,8 +160,7 @@ const Dashboard: React.FC<DashboardPropsExtended> = ({ onLogout, user }) => {
   // Fonction pour retirer un emploi des favoris
   const handleUnsaveJob = async (jobId: number) => {
     try {
-      // Remplacer par un appel API réel
-      // await apiService.unsaveJob(jobId);
+      await apiService.unsaveJob(jobId);
       setSavedJobs(prevJobs => prevJobs.filter(job => job.id !== jobId));
       
       // Mettre à jour le compteur dans les cartes de résumé
@@ -193,83 +173,154 @@ const Dashboard: React.FC<DashboardPropsExtended> = ({ onLogout, user }) => {
     }
   };
 
+  // Charger les 3 candidatures les plus récentes
+  useEffect(() => {
+    const loadRecentApplications = async () => {
+      if (user?.role !== 'candidate') {
+        return;
+      }
+
+      try {
+        const currentUser = apiService.getCurrentUser();
+        if (!currentUser) {
+          return;
+        }
+
+        // Récupérer le profil candidat
+        const candidate = await apiService.getCandidateByUserId(currentUser.id);
+        if (!candidate || !candidate.id) {
+          return;
+        }
+
+        // Récupérer les candidatures du candidat
+        const apps = await apiService.getApplications(candidate.id);
+        
+        // Trier par date (plus récentes en premier)
+        const sortedApps = [...apps].sort((a: any, b: any) => {
+          const dateA = new Date(a.date_application || a.applied_at || 0).getTime();
+          const dateB = new Date(b.date_application || b.applied_at || 0).getTime();
+          return dateB - dateA;
+        });
+
+        // Transformer TOUTES les candidatures en format ApplicationUI (pas seulement 3)
+        const formattedApps = await Promise.all(
+          sortedApps.map(async (app: any): Promise<(ApplicationUI & { offerId?: number }) | null> => {
+            try {
+              // Récupérer les détails de l'offre
+              let offerDetails = app.offer;
+              if (!offerDetails && app.offer_id) {
+                offerDetails = await apiService.getOffer(app.offer_id);
+              }
+
+              const getSalaryRange = (offer: any) => {
+                const minSalary = offer?.min_salary ?? offer?.salary_min ?? offer?.requirement?.minSalary;
+                const maxSalary = offer?.max_salary ?? offer?.salary_max ?? offer?.requirement?.maxSalary;
+                const salaryType = offer?.salary_type ?? offer?.salaryType ?? offer?.requirement?.salaryType;
+                
+                if (minSalary !== null && minSalary !== undefined && maxSalary !== null && maxSalary !== undefined) {
+                  const typeLabel = salaryType === 'Yearly' ? 'an' : salaryType === 'Hourly' ? 'heure' : 'mois';
+                  return `${minSalary} - ${maxSalary} DT/${typeLabel}`;
+                } else if (minSalary !== null && minSalary !== undefined) {
+                  const typeLabel = salaryType === 'Yearly' ? 'an' : salaryType === 'Hourly' ? 'heure' : 'mois';
+                  return `À partir de ${minSalary} DT/${typeLabel}`;
+                }
+                return 'Salaire non spécifié';
+              };
+
+              const formatDate = (dateString: string) => {
+                const date = new Date(dateString);
+                return date.toLocaleDateString('en-US', { 
+                  year: 'numeric', 
+                  month: 'short', 
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                });
+              };
+
+              const getStatusLabel = (status: string) => {
+                const statusMap: Record<string, string> = {
+                  'pending': 'En attente',
+                  'reviewed': 'En cours d\'examen',
+                  'accepted': 'Acceptée',
+                  'rejected': 'Refusée',
+                  'interview': 'Entretien'
+                };
+                return statusMap[status] || status;
+              };
+
+              const getIconForJob = (title: string) => {
+                const lowerTitle = title.toLowerCase();
+                if (lowerTitle.includes('engineer') || lowerTitle.includes('developer')) return { icon: '⚙️', color: 'blue' };
+                if (lowerTitle.includes('designer')) return { icon: '🎨', color: 'pink' };
+                if (lowerTitle.includes('manager')) return { icon: '📊', color: 'green' };
+                if (lowerTitle.includes('analyst')) return { icon: '📈', color: 'orange' };
+                return { icon: '💼', color: 'gray' };
+              };
+
+              const iconData = getIconForJob(offerDetails?.title || '');
+
+              return {
+                id: app.id,
+                offerId: app.offer_id, // Conserver l'ID de l'offre pour la navigation
+                job: {
+                  title: offerDetails?.title || 'Titre non spécifié',
+                  company: offerDetails?.company_name || offerDetails?.company || 'Entreprise non spécifiée',
+                  location: offerDetails?.location || offerDetails?.company_address || 'Localisation non spécifiée',
+                  salary: getSalaryRange(offerDetails || {}),
+                  type: offerDetails?.employment_type || offerDetails?.job_type || 'Type non spécifié',
+                  icon: iconData.icon,
+                  iconColor: iconData.color
+                },
+                dateApplied: formatDate(app.date_application || app.applied_at || new Date().toISOString()),
+                status: getStatusLabel(app.status || 'pending'),
+                action: 'View Details'
+              };
+            } catch (error) {
+              console.error('Error formatting application:', error);
+              return null;
+            }
+          })
+        );
+
+        // Filtrer les nulls et mettre à jour le state
+        const validApps = formattedApps.filter((app): app is ApplicationUI & { offerId?: number } => app !== null);
+        setRecentApplications(validApps as ApplicationUI[]);
+        
+        // Réinitialiser la page à 1 si on a moins de candidatures que la page actuelle
+        const totalPages = Math.ceil(validApps.length / itemsPerPage);
+        if (currentPage > totalPages && totalPages > 0) {
+          setCurrentPage(1);
+        }
+
+        // Mettre à jour le compteur de candidatures
+        setSummaryStats(prev => ({
+          ...prev,
+          appliedJobs: apps.length
+        }));
+      } catch (error) {
+        console.error('Error loading recent applications:', error);
+        setRecentApplications([]);
+      }
+    };
+
+    loadRecentApplications();
+  }, [user]);
+
   const sidebarItems: SidebarItem[] = [
     { id: 'Overview', label: 'Overview', icon: '📊' },
     { id: 'Applied_Jobs', label: 'Applied Jobs', icon: '💼' },
     { id: 'Saved_Jobs', label: 'Saved Jobs', icon: '💾' },
-    { id: 'Job_Alert', label: 'Job Alert', icon: '🔔', badge: '09' },
+    { id: 'Job_Alert', label: 'Job Alert', icon: '🔔', badge: unreadNotificationsCount > 0 ? unreadNotificationsCount.toString() : undefined },
     { id: 'Settings', label: 'Settings', icon: '⚙️' }
   ];
 
   const summaryCards: SummaryCard[] = [
     { title: 'Applied jobs', count: summaryStats.appliedJobs.toString(), icon: '💼', color: 'blue' },
-    { title: 'Saved jobs', count: savedJobs.length.toString(), icon: '💾', color: 'yellow' },
+    { title: 'Saved jobs', count: summaryStats.savedJobs.toString(), icon: '💾', color: 'yellow' },
     { title: 'Job Alerts', count: summaryStats.jobAlerts.toString(), icon: '🔔', color: 'green' }
   ];
 
-  // Données des candidatures pour la page Overview (candidatures récentes)
-  const recentApplications: ApplicationUI[] = [
-    {
-      id: 1,
-      job: {
-        title: 'Networking Engineer',
-        company: 'Up',
-        location: 'Sousse',
-        salary: '1500-2000 DT/month',
-        type: 'Remote',
-        icon: '📈',
-        iconColor: 'green'
-      },
-      dateApplied: 'Feb 2, 2019 19:28',
-      status: 'Active',
-      action: 'View Details'
-    },
-    {
-      id: 2,
-      job: {
-        title: 'Product Designer',
-        company: 'DesignStudio',
-        location: 'Mahdia',
-        salary: '1500-1800 DT/month',
-        type: 'Full Time',
-        icon: '⚙️',
-        iconColor: 'pink'
-      },
-      dateApplied: 'Dec 7, 2019 23:26',
-      status: 'Active',
-      action: 'View Details'
-    },
-    {
-      id: 3,
-      job: {
-        title: 'Junior Graphic Designer',
-        company: 'Apple Inc',
-        location: 'Monastir',
-        salary: '1400-1800 DT/month',
-        type: 'Temporary',
-        icon: '🍎',
-        iconColor: 'black'
-      },
-      dateApplied: 'Feb 2, 2019 19:28',
-      status: 'Active',
-      action: 'View Details'
-    },
-    {
-      id: 4,
-      job: {
-        title: 'Visual Designer',
-        company: 'Microsoft',
-        location: 'Tunis',
-        salary: '2000-2500 DT/month',
-        type: 'Contract Base',
-        icon: '🪟',
-        iconColor: 'multicolor'
-      },
-      dateApplied: 'Dec 7, 2019 23:26',
-      status: 'Active',
-      action: 'View Details'
-    }
-  ];
 
   return (
     <div className="dashboard">
@@ -303,61 +354,7 @@ const Dashboard: React.FC<DashboardPropsExtended> = ({ onLogout, user }) => {
           </nav>
         </div>
         
-        <div className="header-center">
-          <div className="search-container">
-            <div className="location-selector-container">
-              <div 
-                className="location-selector"
-                onClick={() => setIsCountryDropdownOpen(!isCountryDropdownOpen)}
-              >
-                <div className="selected-country">
-                  <span className="flag">{countries.find(c => c.name === selectedCountry)?.flag}</span>
-                  <span>{selectedCountry}</span>
-                </div>
-                <span className="dropdown-arrow">▼</span>
-              </div>
-              
-              {isCountryDropdownOpen && (
-                <div className="country-dropdown">
-                  <div className="country-list">
-                    {countries.map(country => (
-                      <div 
-                        key={country.code}
-                        className={`country-option ${selectedCountry === country.name ? 'selected' : ''}`}
-                        onClick={() => handleCountrySelect(country.name)}
-                      >
-                        <span className="country-flag">{country.flag}</span>
-                        <span className="country-name">{country.name}</span>
-                        {selectedCountry === country.name && (
-                          <span className="checkmark">✓</span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-            <input 
-              type="text" 
-              placeholder="Job title, keyword, company"
-              className="search-input"
-            />
-          </div>
-        </div>
         
-        <div className="header-right">
-          <div className="contact-info">
-            <span className="phone">+216 23 235 891</span>
-          </div>
-          <div className="language-selector">
-            <span className="flag">🇺🇸</span>
-            <span>English</span>
-          </div>
-          <div className="header-icons">
-            <button className="icon-btn notification-btn">🔔</button>
-            <button className="icon-btn profile-btn">⚫</button>
-          </div>
-        </div>
       </header>
 
       <div className="dashboard-content">
@@ -425,8 +422,17 @@ const Dashboard: React.FC<DashboardPropsExtended> = ({ onLogout, user }) => {
               {/* Recently Applied Section */}
               <div className="recently-applied">
                 <div className="section-header">
-                  <h2 className="section-title">Recently Applied</h2>
-                  <a href="#" className="view-all-link">View all →</a>
+                  <h2 className="section-title">Recently Applied Jobs</h2>
+                  <a 
+                    href="#" 
+                    className="view-all-link"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      navigate('/applied-jobs');
+                    }}
+                  >
+                    View all →
+                  </a>
                 </div>
                 
                 <div className="applications-table">
@@ -437,7 +443,10 @@ const Dashboard: React.FC<DashboardPropsExtended> = ({ onLogout, user }) => {
                     <div className="table-cell">Action</div>
                   </div>
                   
-                  {recentApplications.map(application => (
+                  {/* Pagination: afficher seulement les 3 candidatures de la page actuelle */}
+                  {recentApplications
+                    .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+                    .map(application => (
                     <div key={application.id} className="table-row">
                       <div className="table-cell job-cell">
                         <div className="job-info">
@@ -467,13 +476,126 @@ const Dashboard: React.FC<DashboardPropsExtended> = ({ onLogout, user }) => {
                       </div>
                       
                       <div className="table-cell action-cell">
-                        <button className="action-button">
+                        <button 
+                          className="action-button"
+                          onClick={() => {
+                            const app = recentApplications.find(a => a.id === application.id) as any;
+                            if (app && app.offerId) {
+                              navigate(`/job-details/${app.offerId}`);
+                            } else {
+                              navigate('/applied-jobs');
+                            }
+                          }}
+                        >
                           {application.action}
                         </button>
                       </div>
                     </div>
                   ))}
                 </div>
+
+                {/* Pagination Controls */}
+                {recentApplications.length > itemsPerPage && (
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginTop: '20px',
+                    padding: '15px',
+                    background: '#f5f5f5',
+                    borderRadius: '8px'
+                  }}>
+                    <div style={{ fontSize: '14px', color: '#666' }}>
+                      Affichage de {((currentPage - 1) * itemsPerPage) + 1} à {Math.min(currentPage * itemsPerPage, recentApplications.length)} sur {recentApplications.length} candidatures
+                    </div>
+                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                      <button
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={currentPage === 1}
+                        style={{
+                          padding: '8px 16px',
+                          background: currentPage === 1 ? '#e0e0e0' : '#2196F3',
+                          color: currentPage === 1 ? '#999' : 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+                          fontSize: '14px',
+                          fontWeight: '500'
+                        }}
+                      >
+                        ← Précédent
+                      </button>
+                      
+                      <div style={{ display: 'flex', gap: '5px' }}>
+                        {Array.from({ length: Math.ceil(recentApplications.length / itemsPerPage) }, (_, i) => i + 1).map((page) => (
+                          <button
+                            key={page}
+                            onClick={() => setCurrentPage(page)}
+                            style={{
+                              padding: '8px 12px',
+                              background: currentPage === page ? '#2196F3' : 'white',
+                              color: currentPage === page ? 'white' : '#666',
+                              border: '1px solid #ddd',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '14px',
+                              fontWeight: currentPage === page ? '600' : '400',
+                              minWidth: '36px'
+                            }}
+                          >
+                            {page}
+                          </button>
+                        ))}
+                      </div>
+                      
+                      <button
+                        onClick={() => setCurrentPage(prev => Math.min(Math.ceil(recentApplications.length / itemsPerPage), prev + 1))}
+                        disabled={currentPage === Math.ceil(recentApplications.length / itemsPerPage)}
+                        style={{
+                          padding: '8px 16px',
+                          background: currentPage === Math.ceil(recentApplications.length / itemsPerPage) ? '#e0e0e0' : '#2196F3',
+                          color: currentPage === Math.ceil(recentApplications.length / itemsPerPage) ? '#999' : 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: currentPage === Math.ceil(recentApplications.length / itemsPerPage) ? 'not-allowed' : 'pointer',
+                          fontSize: '14px',
+                          fontWeight: '500'
+                        }}
+                      >
+                        Suivant →
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Message si aucune candidature */}
+                {recentApplications.length === 0 && (
+                  <div style={{
+                    textAlign: 'center',
+                    padding: '40px 20px',
+                    color: '#666',
+                    fontSize: '16px'
+                  }}>
+                    <div style={{ fontSize: '48px', marginBottom: '15px' }}>📭</div>
+                    <p>Aucune candidature récente. Commencez à postuler dès maintenant !</p>
+                    <button
+                      onClick={() => navigate('/find-jobs')}
+                      style={{
+                        marginTop: '20px',
+                        padding: '12px 24px',
+                        background: '#2196F3',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '16px',
+                        fontWeight: '500'
+                      }}
+                    >
+                      Parcourir les offres
+                    </button>
+                  </div>
+                )}
               </div>
             </>
           )}

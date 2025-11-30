@@ -77,6 +77,7 @@ app.use('/api/recruiters/:recruiterId/offers', offerLimiter);
 app.use('/api', offerRoutes);
 app.use('/api/applications', applicationRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/saved-jobs', require('./routes/savedJobRoutes'));
 
 
 // ✅ Route protégée exemple

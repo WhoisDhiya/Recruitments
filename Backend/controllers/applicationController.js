@@ -170,13 +170,34 @@ const updateApplicationStatus = async (req, res) => {
 
         if (candidateInfoRows.length) {
             const info = candidateInfoRows[0];
+            
+            // Messages en français selon le statut
+            let subject = '';
+            let message = '';
+            
+            if (status === 'accepted') {
+                subject = '🎉 Candidature acceptée !';
+                message = `Félicitations ! Votre candidature pour le poste "${info.title}" a été acceptée. Le recruteur vous contactera prochainement.`;
+            } else if (status === 'rejected') {
+                subject = '❌ Candidature refusée';
+                message = `Votre candidature pour le poste "${info.title}" a été refusée. Ne vous découragez pas et continuez vos recherches !`;
+            } else if (status === 'reviewed') {
+                subject = '👀 Candidature en cours d\'examen';
+                message = `Votre candidature pour le poste "${info.title}" est en cours d'examen. Vous serez notifié dès qu'une décision sera prise.`;
+            } else {
+                subject = `Statut candidature: ${status}`;
+                message = `Le statut de votre candidature pour "${info.title}" a été mis à jour.`;
+            }
+            
             await Notification.create({
                 user_id: info.user_id,
                 application_id: applicationId,
                 email: info.email,
-                subject: `Statut candidature: ${status}`,
-                message: `Votre candidature pour "${info.title}" est maintenant "${status}".`
+                subject: subject,
+                message: message
             });
+            
+            console.log(`✅ Notification envoyée au candidat ${info.user_id} pour la candidature ${applicationId} (statut: ${status})`);
         }
 
         return res.json({ message: "Statut mis à jour avec succès" });

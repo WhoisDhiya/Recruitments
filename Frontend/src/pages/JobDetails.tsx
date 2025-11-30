@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { DashboardProps } from '../types';
 import { apiService } from '../services/api';
 import './JobDetails.css';
@@ -34,9 +34,16 @@ interface JobDetailsData {
 const JobDetails: React.FC<DashboardProps> = ({ onLogout, user }) => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const [jobDetails, setJobDetails] = useState<JobDetailsData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [hasApplied, setHasApplied] = useState(false);
+  const [applicationStatus, setApplicationStatus] = useState<string | null>(null);
+
+  // Vérifier si on vient de applied-jobs et récupérer le statut
+  const fromAppliedJobs = searchParams.get('from') === 'applied-jobs';
+  const statusFromQuery = searchParams.get('status');
 
   useEffect(() => {
     const loadJobDetails = async () => {
@@ -49,6 +56,30 @@ const JobDetails: React.FC<DashboardProps> = ({ onLogout, user }) => {
       try {
         const data = await apiService.getJobDetails(parseInt(id));
         setJobDetails(data);
+
+        // Si on vient de applied-jobs, on sait déjà qu'on a postulé
+        if (fromAppliedJobs && statusFromQuery) {
+          setHasApplied(true);
+          setApplicationStatus(statusFromQuery);
+        } else if (user?.role === 'candidate') {
+          // Sinon, vérifier si le candidat a déjà postulé
+          try {
+            const currentUser = apiService.getCurrentUser();
+            if (currentUser) {
+              const candidate = await apiService.getCandidateByUserId(currentUser.id);
+              if (candidate && candidate.id) {
+                const applications = await apiService.getApplications(candidate.id);
+                const application = applications.find((app: any) => app.offer_id === parseInt(id));
+                if (application) {
+                  setHasApplied(true);
+                  setApplicationStatus(application.status || 'pending');
+                }
+              }
+            }
+          } catch (err) {
+            console.error('Error checking application status:', err);
+          }
+        }
       } catch (err: any) {
         console.error('Error loading job details:', err);
         setError(err.message || 'Failed to load job details');
@@ -58,7 +89,7 @@ const JobDetails: React.FC<DashboardProps> = ({ onLogout, user }) => {
     };
 
     loadJobDetails();
-  }, [id]);
+  }, [id, user, fromAppliedJobs, statusFromQuery]);
 
   const formatDate = (dateString?: string): string => {
     if (!dateString) return 'Not specified';
@@ -248,18 +279,90 @@ const JobDetails: React.FC<DashboardProps> = ({ onLogout, user }) => {
 
           {/* Action Buttons */}
           <div className="action-buttons">
-            <button 
-              onClick={() => navigate(`/post-job?edit=${offer.id}`)}
-              className="btn-edit"
-            >
-              ✏️ Edit Job
-            </button>
-            <button 
-              onClick={() => navigate('/dashboard')}
-              className="btn-back"
-            >
-              Back to Dashboard
-            </button>
+            {user?.role === 'recruiter' ? (
+              <>
+                <button 
+                  onClick={() => navigate(`/post-job?edit=${offer.id}`)}
+                  className="btn-edit"
+                >
+                  ✏️ Edit Job
+                </button>
+                <button 
+                  onClick={() => navigate('/dashboard')}
+                  className="btn-back"
+                >
+                  Back to Dashboard
+                </button>
+              </>
+            ) : (
+              <>
+                {hasApplied ? (
+                  <>
+                    <div style={{
+                      padding: '12px 24px',
+                      background: applicationStatus === 'accepted' ? '#4caf50' :
+                                   applicationStatus === 'rejected' ? '#f44336' :
+                                   applicationStatus === 'reviewed' ? '#ff9800' :
+                                   '#2196F3',
+                      color: 'white',
+                      borderRadius: '4px',
+                      fontSize: '16px',
+                      fontWeight: '500',
+                      display: 'inline-block',
+                      marginRight: '10px'
+                    }}>
+                      {applicationStatus === 'accepted' ? '✅ Candidature acceptée' :
+                       applicationStatus === 'rejected' ? '❌ Candidature refusée' :
+                       applicationStatus === 'reviewed' ? '👀 En cours d\'examen' :
+                       '⏳ En attente de traitement'}
+                    </div>
+                    <button 
+                      onClick={() => navigate('/applied-jobs')}
+                      className="btn-back"
+                    >
+                      ← Retour aux candidatures
+                    </button>
+                    <button 
+                      onClick={() => navigate('/find-jobs')}
+                      className="btn-back"
+                    >
+                      Retour aux offres
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button 
+                      onClick={() => navigate(`/job-application/${offer.id}`)}
+                      className="btn-apply"
+                      style={{
+                        background: '#2196F3',
+                        color: 'white',
+                        padding: '12px 24px',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '16px',
+                        fontWeight: '500'
+                      }}
+                    >
+                      Postuler maintenant
+                    </button>
+                    <button 
+                      onClick={() => navigate('/applied-jobs')}
+                      className="btn-back"
+                    >
+                      ← Retour aux candidatures
+                    </button>
+                    <button 
+                      onClick={() => navigate('/find-jobs')}
+                      className="btn-back"
+                    >
+                      Retour aux offres
+                    </button>
+                  </>
+                )}
+              </>
+            )}
           </div>
         </main>
       </div>

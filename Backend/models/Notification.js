@@ -61,6 +61,15 @@ class Notification {
         );
         return rows[0].count;
     }
+
+    // Trouver une notification par ID
+    static async findById(id) {
+        const [rows] = await db.query(
+            'SELECT * FROM notifications WHERE id = ?',
+            [id]
+        );
+        return rows[0] || null;
+    }
 }
 
 module.exports = Notification;

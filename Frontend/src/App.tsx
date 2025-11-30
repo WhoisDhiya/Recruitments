@@ -17,6 +17,10 @@ import EmployerProfile from './pages/EmployerProfile.tsx';
 import FindJobsList from './pages/FindJobsList.tsx';
 import JobApplicationPage from './pages/JobApplicationPage.tsx';
 import SavedJobs from './pages/SavedJobs.tsx';
+import CandidateSettings from './pages/CandidateSettings.tsx';
+import CandidateNotifications from './pages/CandidateNotifications.tsx';
+import CustomerSupport from './pages/CustomerSupport.tsx';
+import AppliedJobs from './pages/AppliedJobs.tsx';
 
 //Added MyJobs route in App.tsx and imported MyJobs.
 //Updated PostJobPage.tsx sidebar handler so clicking "My Jobs" navigates to /my-jobs.
@@ -26,21 +30,42 @@ import SavedJobs from './pages/SavedJobs.tsx';
 function App() {
   const [status, setStatus] = useState("Checking backend...");
   const [offers, setOffers] = useState<Offer[]>([]);
-  const [user, setUser] = useState<User | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  // Initialiser depuis localStorage AVANT le premier render pour éviter le logout au refresh
+  const [user, setUser] = useState<User | null>(() => {
+    const storedUser = apiService.getCurrentUser();
+    console.log('🔐 App initialization - User from localStorage:', storedUser);
+    return storedUser;
+  });
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    const auth = apiService.isAuthenticated();
+    console.log('🔐 App initialization - isAuthenticated from localStorage:', auth);
+    return auth;
+  });
 
   useEffect(() => {
-    // Vérifier et synchroniser l'état d'authentification depuis localStorage
+    console.log('🔄 App useEffect - Current state:', { isAuthenticated, user: user?.email });
+    
+    // Vérifier depuis localStorage pour synchroniser l'état
     const currentUser = apiService.getCurrentUser();
     const authenticated = apiService.isAuthenticated();
+    
+    console.log('🔄 App useEffect - localStorage check:', { authenticated, currentUser: currentUser?.email });
 
-    if (authenticated) {
-      setUser(currentUser);
-      setIsAuthenticated(true);
-    } else {
-      setIsAuthenticated(false);
-      setUser(null);
-    }
+    // IMPORTANT: Ne JAMAIS mettre isAuthenticated à false si on avait déjà un état authentifié
+    // au refresh, sauf si localStorage est vraiment vide (pas juste une vérification qui échoue)
+    if (authenticated && currentUser) {
+      // Toujours mettre à jour si localStorage dit qu'on est authentifié
+      if (!isAuthenticated || !user || user.id !== currentUser.id) {
+        console.log('✅ Updating state: authenticated in localStorage');
+        setUser(currentUser);
+        setIsAuthenticated(true);
+      }
+    } 
+    // NE PAS mettre à false automatiquement - laisser l'initialisation synchrone gérer ça
+    // else if (!authenticated && isAuthenticated) {
+    //   // Ne pas nettoyer automatiquement au refresh - peut-être que le token est encore valide
+    //   console.log('⚠️ localStorage says not authenticated, but keeping state as is');
+    // }
 
     // Vérifier la santé du backend
     apiService.getHealth()
@@ -110,7 +135,11 @@ function App() {
             ) : <Navigate to="/signin" />
           } />
           <Route path="/settings" element={
-            isAuthenticated ? <Settings user={user || undefined} /> : <Navigate to="/signin" />
+            isAuthenticated 
+              ? (user?.role === 'candidate' 
+                  ? <CandidateSettings user={user || undefined} onLogout={handleLogout} />
+                  : <Settings user={user || undefined} />)
+              : <Navigate to="/signin" />
           } />
           <Route path="/admin" element={<AdminDashboard onLogout={handleLogout} />} />
           <Route path="/post-job" element={
@@ -124,7 +153,7 @@ function App() {
               : <Navigate to="/signin" />
           } />
           <Route path="/job-details/:id" element={
-            isAuthenticated && user?.role === 'recruiter'
+            isAuthenticated
               ? <JobDetails onLogout={handleLogout} user={user || undefined} />
               : <Navigate to="/signin" />
           } />
@@ -143,7 +172,22 @@ function App() {
           } />
           <Route path="/saved-jobs" element={
             isAuthenticated && user?.role === 'candidate'
-              ? <SavedJobs />
+              ? <SavedJobs user={user || undefined} onLogout={handleLogout} />
+              : <Navigate to="/signin" />
+          } />
+          <Route path="/applied-jobs" element={
+            isAuthenticated && user?.role === 'candidate'
+              ? <AppliedJobs user={user || undefined} onLogout={handleLogout} />
+              : <Navigate to="/signin" />
+          } />
+          <Route path="/notifications" element={
+            isAuthenticated && user?.role === 'candidate'
+              ? <CandidateNotifications user={user || undefined} onLogout={handleLogout} />
+              : <Navigate to="/signin" />
+          } />
+          <Route path="/customer-support" element={
+            isAuthenticated && user?.role === 'candidate'
+              ? <CustomerSupport user={user || undefined} onLogout={handleLogout} />
               : <Navigate to="/signin" />
           } />
         </Routes>

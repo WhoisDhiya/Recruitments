@@ -177,6 +177,11 @@ const FindJobsList: React.FC<FindJobsListProps> = ({ user, isAuthenticated, onLo
   };
 
   const handleSaveJob = async (job: Offer) => {
+    if (!isAuthenticated) {
+      navigate('/signin');
+      return;
+    }
+
     try {
       // Vérifier si l'offre est déjà sauvegardée
       const isCurrentlySaved = savedJobs.includes(job.id);
@@ -216,7 +221,6 @@ const FindJobsList: React.FC<FindJobsListProps> = ({ user, isAuthenticated, onLo
   const navigationItems: NavigationItem[] = [
     { id: 'Home', label: 'Home' },
     { id: 'Find_Job', label: 'Find Job', active: true },
-    { id: 'Find_Employers', label: 'Find Employers' },
     { id: 'Dashboard', label: 'Dashboard' },
     { id: 'Job_Alerts', label: 'Job Alerts' },
     { id: 'Customer_Supports', label: 'Customer Supports' }
@@ -239,6 +243,10 @@ const FindJobsList: React.FC<FindJobsListProps> = ({ user, isAuthenticated, onLo
       navigate('/');
     } else if (itemId === 'Find_Job') {
       navigate('/find-jobs');
+    } else if (itemId === 'Job_Alerts') {
+      navigate('/notifications');
+    } else if (itemId === 'Customer_Supports') {
+      navigate('/customer-support');
     }
   };
 
@@ -259,6 +267,21 @@ const FindJobsList: React.FC<FindJobsListProps> = ({ user, isAuthenticated, onLo
     // For other items, just update active tab
     setActiveTab(itemId);
   };
+
+  // Charger les IDs des offres sauvegardées au chargement
+  useEffect(() => {
+    const loadSavedJobIds = async () => {
+      if (isAuthenticated && user?.role === 'candidate') {
+        try {
+          const savedIds = await apiService.getSavedJobIds();
+          setSavedJobs(savedIds);
+        } catch (error) {
+          console.error('Erreur lors du chargement des offres sauvegardées:', error);
+        }
+      }
+    };
+    loadSavedJobIds();
+  }, [isAuthenticated, user]);
 
   // Load jobs from API
   useEffect(() => {
@@ -389,30 +412,10 @@ const FindJobsList: React.FC<FindJobsListProps> = ({ user, isAuthenticated, onLo
           </nav>
         </div>
         
-        <div className="header-right">
-          <div className="contact-info">
-            <span className="phone">+216 23 235 891</span>
-          </div>
-          <div className="language-selector">
-            <span className="flag">🇺🇸</span>
-            <span>English</span>
-          </div>
-          <div className="header-icons">
-            <button className="icon-btn notification-btn">🔔</button>
-            <button className="icon-btn profile-btn">
-              {user?.first_name ? user.first_name[0].toUpperCase() : 'U'}
-            </button>
-            {onLogout && (
-              <button 
-                onClick={onLogout} 
-                className="logout-btn"
-                title="Logout"
-              >
-                Logout
-              </button>
-            )}
-          </div>
-        </div>
+      
+      
+        
+       
       </header>
 
       <div className="dashboard-content">
