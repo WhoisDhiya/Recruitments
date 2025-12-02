@@ -24,6 +24,25 @@ interface SavedCandidate extends CandidateSummary {
   savedAt: string;
 }
 
+interface ApplicationDetails {
+  id: number;
+  status: string;
+  date_application: string;
+  offer_id: number;
+  offer_title: string;
+  offer_description?: string;
+  offer_location?: string;
+  salary_min?: number;
+  salary_max?: number;
+  salary_type?: string;
+  candidate_id: number;
+  cv?: string;
+  image?: string;
+  candidate_first_name: string;
+  candidate_last_name: string;
+  candidate_email: string;
+}
+
 type RecruiterTab =
   | 'Home'
   | 'Overview'
@@ -50,6 +69,10 @@ const RecruiterDashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
   const [showEditModal, setShowEditModal] = useState<boolean>(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<boolean>(false);
   const [jobToDelete, setJobToDelete] = useState<number | null>(null);
+  const [showApplicationDetailsModal, setShowApplicationDetailsModal] = useState<boolean>(false);
+  const [applicationDetails, setApplicationDetails] = useState<ApplicationDetails | null>(null);
+  const [isLoadingApplicationDetails, setIsLoadingApplicationDetails] = useState<boolean>(false);
+  const [applicationDetailsError, setApplicationDetailsError] = useState<string | null>(null);
   const [editFormData, setEditFormData] = useState<{ title: string; date_expiration?: string }>({ title: '' });
   const [candidateApplications, setCandidateApplications] = useState<CandidateSummary[]>([]);
   const [savedCandidates, setSavedCandidates] = useState<SavedCandidate[]>([]);
@@ -363,39 +386,47 @@ const RecruiterDashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
     );
   };
 
-  const handleAcceptApplication = async (applicationId: number) => {
+  const updateApplicationStatusInternal = async (
+    applicationId: number,
+    status: 'accepted' | 'rejected' | 'pending',
+    successMessage: string
+  ) => {
     try {
-      await apiService.updateApplicationStatus(applicationId, 'accepted');
-      // Reload applications to update status
+      await apiService.updateApplicationStatus(applicationId, status);
       await loadDashboardData();
-      alert('Application accepted successfully!');
+      setApplicationDetails(prev => (prev && prev.id === applicationId ? { ...prev, status } : prev));
+      alert(successMessage);
     } catch (error: any) {
-      console.error('Error accepting application:', error);
-      alert(error.message || 'Failed to accept application');
+      console.error('Error updating application status:', error);
+      alert(error.message || 'Failed to update application status');
     }
+  };
+
+  const handleAcceptApplication = async (applicationId: number) => {
+    await updateApplicationStatusInternal(applicationId, 'accepted', 'Application accepted successfully!');
   };
 
   const handleRejectApplication = async (applicationId: number) => {
-    try {
-      await apiService.updateApplicationStatus(applicationId, 'rejected');
-      // Reload applications to update status
-      await loadDashboardData();
-      alert('Application rejected');
-    } catch (error: any) {
-      console.error('Error rejecting application:', error);
-      alert(error.message || 'Failed to reject application');
-    }
+    await updateApplicationStatusInternal(applicationId, 'rejected', 'Application rejected');
   };
 
   const handleResetToPending = async (applicationId: number) => {
+    await updateApplicationStatusInternal(applicationId, 'pending', 'Application status reset to pending');
+  };
+
+  const handleViewApplicationDetails = async (applicationId: number) => {
+    setShowApplicationDetailsModal(true);
+    setIsLoadingApplicationDetails(true);
+    setApplicationDetails(null);
+    setApplicationDetailsError(null);
     try {
-      await apiService.updateApplicationStatus(applicationId, 'pending');
-      // Reload applications to update status
-      await loadDashboardData();
-      alert('Application status reset to pending');
+      const details = await apiService.getApplicationDetails(applicationId);
+      setApplicationDetails(details);
     } catch (error: any) {
-      console.error('Error resetting application:', error);
-      alert(error.message || 'Failed to reset application status');
+      console.error('Error fetching application details:', error);
+      setApplicationDetailsError(error.message || 'Failed to load application details');
+    } finally {
+      setIsLoadingApplicationDetails(false);
     }
   };
 
@@ -597,6 +628,12 @@ const RecruiterDashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
                 </div>
 
                 <div className="candidate-actions">
+                  <button
+                    className="btn-secondary"
+                    onClick={() => handleViewApplicationDetails(candidate.applicationId)}
+                  >
+                    View Application
+                  </button>
                   {options.allowSave && (
                     <>
                       <button
@@ -829,6 +866,92 @@ const RecruiterDashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
           {renderMainContent()}
         </main>
       </div>
+
+      {showApplicationDetailsModal && (
+        <div className="modal-overlay" onClick={() => setShowApplicationDetailsModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2 className="modal-title">Application Details</h2>
+
+            {isLoadingApplicationDetails ? (
+              <div className="loading-state">Loading application...</div>
+            ) : applicationDetailsError ? (
+              <div className="error-state">{applicationDetailsError}</div>
+            ) : applicationDetails ? (
+              <div className="application-details-modal">
+                <div className="detail-block">
+                  <h3>Candidate Information</h3>
+                  <p><strong>Name:</strong> {applicationDetails.candidate_first_name} {applicationDetails.candidate_last_name}</p>
+                  <p><strong>Email:</strong> {applicationDetails.candidate_email}</p>
+                  {applicationDetails.cv && (
+                    <p><strong>CV:</strong> {applicationDetails.cv}</p>
+                  )}
+                </div>
+                <div className="detail-block">
+                  <h3>Application</h3>
+                  <p><strong>Status:</strong> {applicationDetails.status}</p>
+                  <p><strong>Applied on:</strong> {formatDateTime(applicationDetails.date_application)}</p>
+                </div>
+                <div className="detail-block">
+                  <h3>Job Offer</h3>
+                  <p><strong>Title:</strong> {applicationDetails.offer_title}</p>
+                  {applicationDetails.offer_location && (
+                    <p><strong>Location:</strong> {applicationDetails.offer_location}</p>
+                  )}
+                  {(applicationDetails.salary_min || applicationDetails.salary_max) && (
+                    <p>
+                      <strong>Salary:</strong>{' '}
+                      {applicationDetails.salary_min || applicationDetails.salary_max
+                        ? `${applicationDetails.salary_min ?? ''}${
+                            applicationDetails.salary_min && applicationDetails.salary_max ? ' - ' : ''
+                          }${applicationDetails.salary_max ?? ''} ${applicationDetails.salary_type || ''}`
+                        : 'Not specified'}
+                    </p>
+                  )}
+                  {applicationDetails.offer_description && (
+                    <p className="modal-message">
+                      {applicationDetails.offer_description.length > 400
+                        ? `${applicationDetails.offer_description.substring(0, 400)}...`
+                        : applicationDetails.offer_description}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="modal-actions">
+              {applicationDetails && (
+                <>
+                  <button
+                    className="btn-accept"
+                    onClick={() => handleAcceptApplication(applicationDetails.id)}
+                    disabled={applicationDetails.status === 'accepted'}
+                  >
+                    {applicationDetails.status === 'accepted' ? '✓ Accepted' : 'Accept'}
+                  </button>
+                  <button
+                    className="btn-reject"
+                    onClick={() => handleRejectApplication(applicationDetails.id)}
+                    disabled={applicationDetails.status === 'rejected'}
+                  >
+                    {applicationDetails.status === 'rejected' ? '✗ Rejected' : 'Reject'}
+                  </button>
+                  {applicationDetails.status !== 'pending' && (
+                    <button
+                      className="btn-secondary"
+                      onClick={() => handleResetToPending(applicationDetails.id)}
+                    >
+                      Reset to Pending
+                    </button>
+                  )}
+                </>
+              )}
+              <button className="btn-secondary" onClick={() => setShowApplicationDetailsModal(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showEditModal && editingJob && (
         <div className="modal-overlay" onClick={() => setShowEditModal(false)}>

@@ -103,6 +103,74 @@ const getApplicationById = async (req, res) => {
         res.status(500).json({ status: "ERROR", message: "Erreur serveur", error: err.message });
     }
 };
+
+// Récupérer les détails d'une candidature (côté recruteur)
+const getApplicationDetailsForRecruiter = async (req, res) => {
+    try {
+        const applicationId = req.params.id;
+        const userRole = req.user.role;
+        const userId = req.user.user_id;
+
+        if (userRole !== "recruiter") {
+            return res.status(403).json({ status: "ERROR", message: "Accès refusé : réservé aux recruteurs" });
+        }
+
+        const [recruiterRows] = await db.query(
+            "SELECT id FROM recruiters WHERE user_id = ?",
+            [userId]
+        );
+
+        if (recruiterRows.length === 0) {
+            return res.status(400).json({ status: "ERROR", message: "Ce user n'est pas un recruteur" });
+        }
+
+        const recruiterId = recruiterRows[0].id;
+
+        const [rows] = await db.query(`
+            SELECT 
+                a.id,
+                a.status,
+                a.date_application,
+                a.created_at,
+                o.id AS offer_id,
+                o.title AS offer_title,
+                o.description AS offer_description,
+                o.location AS offer_location,
+                o.salary_min,
+                o.salary_max,
+                o.salary_type,
+                c.id AS candidate_id,
+                c.cv,
+                c.image,
+                u.first_name AS candidate_first_name,
+                u.last_name AS candidate_last_name,
+                u.email AS candidate_email
+            FROM applications a
+            JOIN offers o ON o.id = a.offer_id
+            JOIN recruiters r ON r.id = o.recruiter_id
+            JOIN candidates c ON c.id = a.candidate_id
+            JOIN users u ON u.id = c.user_id
+            WHERE a.id = ? AND r.id = ?
+            LIMIT 1
+        `, [applicationId, recruiterId]);
+
+        if (rows.length === 0) {
+            return res.status(404).json({ status: "ERROR", message: "Candidature introuvable pour ce recruteur" });
+        }
+
+        return res.status(200).json({
+            status: "SUCCESS",
+            data: rows[0]
+        });
+    } catch (error) {
+        console.error("Erreur récupération détails candidature:", error);
+        res.status(500).json({
+            status: "ERROR",
+            message: "Erreur lors de la récupération des détails de la candidature",
+            error: error.message
+        });
+    }
+};
 const updateApplicationStatus = async (req, res) => {
     try {
         const applicationId = req.params.id;
@@ -287,6 +355,7 @@ const deleteApplication = async (req, res) => {
 module.exports = {
   createApplication,
   getApplicationById,
+  getApplicationDetailsForRecruiter,
   updateApplicationStatus,
   deleteApplication,
 };
