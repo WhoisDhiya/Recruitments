@@ -111,3 +111,39 @@ CREATE TABLE IF NOT EXISTS payments (
     FOREIGN KEY (recruiter_id) REFERENCES recruiters(id) ON DELETE CASCADE,
     FOREIGN KEY (offer_id) REFERENCES offers(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Table SavedJobs (pour les candidats qui sauvegardent des offres)
+CREATE TABLE IF NOT EXISTS saved_jobs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    candidate_id INT NOT NULL,
+    offer_id INT NOT NULL,
+    saved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_saved_job (candidate_id, offer_id),
+    FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE,
+    FOREIGN KEY (offer_id) REFERENCES offers(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Table Packs (subscription plans for recruiters)
+CREATE TABLE IF NOT EXISTS packs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(50) NOT NULL,
+    price DECIMAL(10,2) NOT NULL DEFAULT 0,
+    job_limit INT NOT NULL DEFAULT 0,
+    candidate_limit INT NOT NULL DEFAULT 0,
+    visibility_days INT NOT NULL DEFAULT 30,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Table RecruiterSubscriptions (tracks active subscriptions)
+CREATE TABLE IF NOT EXISTS recruiter_subscriptions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    recruiter_id INT NOT NULL,
+    pack_id INT NOT NULL,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    status ENUM('active','inactive','cancelled','expired') DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (recruiter_id) REFERENCES recruiters(id) ON DELETE CASCADE,
+    FOREIGN KEY (pack_id) REFERENCES packs(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

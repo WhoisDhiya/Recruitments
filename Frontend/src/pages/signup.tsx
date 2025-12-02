@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 // lucide-react icons for aesthetics
 import { Lock, CheckCircle, XCircle, Briefcase, Building2, TrendingUp, Menu, User, Mail, MapPin } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { apiService } from '../services/api';
 
 // Define the backend API endpoint here. 
 // IMPORTANT: Ensure your backend is running on this URL and has CORS enabled!
@@ -41,6 +42,15 @@ const App = () => {
     const [message, setMessage] = useState<string | null>(null);
     const [isSuccess, setIsSuccess] = useState<boolean>(false);
     const [isLoading, setIsLoading] = useState<boolean>(false);
+    
+    // Pack selection state (for recruiters) - Always show packs for recruiters
+    const [packs, setPacks] = useState<any[]>([]);
+    const [selectedPack, setSelectedPack] = useState<number | null>(null);
+    const [isLoadingPacks, setIsLoadingPacks] = useState<boolean>(false);
+    const [isProcessingPayment, setIsProcessingPayment] = useState<boolean>(false);
+    // When recruiter chooses payment before finalizing account, keep the form payload here
+    const [pendingRecruiterPayload, setPendingRecruiterPayload] = useState<Record<string, any> | null>(null);
+    const [pendingRecruiterId, setPendingRecruiterId] = useState<number | null>(null);
 
     // Function to handle form submission
     const handleSignup = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -62,15 +72,41 @@ const App = () => {
 
         try {
             // --- START: DATA TRANSFORMATION TO MATCH BACKEND MODEL ---
-            const nameParts = fullName.trim().split(/\s+/);
-            const first_name = nameParts[0] || '';
-            const last_name = nameParts.slice(1).join(' ') || '';
+            // Validate required fields first
+            if (!fullName || !fullName.trim()) {
+                setMessage("Full name is required.");
+                setIsLoading(false);
+                return;
+            }
+
+            if (!email || !email.trim()) {
+                setMessage("Email is required.");
+                setIsLoading(false);
+                return;
+            }
+
+            if (!password || !password.trim()) {
+                setMessage("Password is required.");
+                setIsLoading(false);
+                return;
+            }
+
+            // Split full name into first_name and last_name
+            const nameParts = fullName.trim().split(/\s+/).filter(part => part.length > 0);
+            let first_name = nameParts[0] || fullName.trim();
+            let last_name = nameParts.slice(1).join(' ') || '';
+            
+            // If last_name is empty (only one word provided), use first_name as last_name
+            // This ensures both fields are always populated
+            if (!last_name || last_name.trim() === '') {
+                last_name = first_name;
+            }
             
             // Construct the base payload
             const payload: Record<string, unknown> = {
                 last_name: last_name,
                 first_name: first_name,
-                email: email,
+                email: email.trim(),
                 password: password,
                 role: userType
             };
@@ -91,35 +127,50 @@ const App = () => {
             console.log("Sending Payload to Backend:", payload);
             // --- END: DATA TRANSFORMATION ---
 
-            // --- START: REAL NETWORK REQUEST USING FETCH ---
-            const response = await fetch(BACKEND_API_URL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(payload)
-            });
+            // For recruiters, we just validate and store the payload
+            // The packs are already visible on the same page
+            if (userType === 'recruiter') {
+                // Store the payload for later use when pack is selected
+                setPendingRecruiterPayload(payload);
+                setMessage('Please select a subscription plan below to complete your registration.');
+                setIsSuccess(true);
+                setIsLoading(false);
+                // Scroll to packs section
+                setTimeout(() => {
+                    document.getElementById('packs-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 100);
+                return;
+            } else {
+                // --- START: REAL NETWORK REQUEST USING FETCH (candidates) ---
+                const response = await fetch(BACKEND_API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload)
+                });
 
-            // Read the response body (can be success data or an error object)
-            const result = await response.json(); 
+                // Read the response body (can be success data or an error object)
+                const result = await response.json(); 
 
-            if (!response.ok) {
-                // If the server response is an error (e.g., 400, 500), throw an error.
-                // We use result.message for specific backend error reporting.
-                throw new Error(result.message || `HTTP error! Status: ${response.status}`);
+                if (!response.ok) {
+                    // If the server response is an error (e.g., 400, 500), throw an error.
+                    // We use result.message for specific backend error reporting.
+                    throw new Error(result.message || `HTTP error! Status: ${response.status}`);
+                }
+
+                // Success case: Extract the real userId from the backend response
+                const userId = result.data.user_id; 
+                setCreatedUserId(userId);
+
+                // For candidates, redirect to sign in
+                setMessage(`Account created successfully! Redirecting to login...`);
+                setIsSuccess(true);
+                setTimeout(() => {
+                    window.location.href = '/signin';
+                }, 2000);
+                // --- END: candidate flow ---
             }
-
-            // Success case: Extract the real userId from the backend response
-            const userId = result.data.user_id; 
-
-            // UPDATE MESSAGE TO SHOW USER ID:
-            setMessage(`Account created successfully! User ID: ${userId}. Redirecting...`);
-            setIsSuccess(true);
-            
-            // Optionally clear the form or redirect after a short delay
-            setTimeout(() => {
-                // window.location.href = '/login'; // Uncomment for real redirection
-            }, 3000); 
 
         } catch (error) {
             // This catches network errors (e.g., server down) and thrown application errors (e.g., 400 bad request)
@@ -132,6 +183,147 @@ const App = () => {
         } finally {
             setIsLoading(false);
         }
+    };
+
+    // Load available packs on component mount for recruiters
+    useEffect(() => {
+        if (userType === 'recruiter') {
+            loadPacks();
+        }
+    }, [userType]);
+
+    // Load available packs
+    const loadPacks = async () => {
+        try {
+            setIsLoadingPacks(true);
+            
+            const packsData = await apiService.getPacks();
+            console.log('Packs loaded:', packsData);
+            
+            if (!packsData || packsData.length === 0) {
+                return;
+            }
+            
+            // Sort packs: basic, standard, premium
+            const sortedPacks = packsData.sort((a: any, b: any) => {
+                const order: Record<string, number> = { basic: 1, standard: 2, premium: 3 };
+                return (order[a.name] || 999) - (order[b.name] || 999);
+            });
+            setPacks(sortedPacks);
+        } catch (err: any) {
+            console.error('Error loading packs:', err);
+        } finally {
+            setIsLoadingPacks(false);
+        }
+    };
+
+    // Handle pack selection and payment
+    const handlePackSelection = async (packId: number) => {
+        // Check if we have recruiter information
+        if (!pendingRecruiterPayload && !pendingRecruiterId) {
+            setMessage('Error: Please fill out the form above first.');
+            return;
+        }
+
+        if (isProcessingPayment) return;
+
+        try {
+            setIsProcessingPayment(true);
+            setSelectedPack(packId);
+            setMessage(null);
+
+            // If we already have a pending_id, use it; otherwise create a new pending recruiter
+            let sessionArg: any = null;
+            
+            if (pendingRecruiterId) {
+                // If we already have a pending_id, use it
+                console.log('Using existing pending_id:', pendingRecruiterId);
+                sessionArg = { pending_id: pendingRecruiterId };
+            } else if (pendingRecruiterPayload) {
+                // Create pending recruiter now (when pack is selected)
+                console.log('Creating pending recruiter...');
+                try {
+                    const { pending_id } = await apiService.createPendingRecruiter(pendingRecruiterPayload as any);
+                    setPendingRecruiterId(pending_id);
+                    (window as any).__pending_recruiter_id = pending_id;
+                    sessionArg = { pending_id: pending_id };
+                    console.log('Pending recruiter created with ID:', pending_id);
+                } catch (err: any) {
+                    console.error('Failed to create pending recruiter:', err);
+                    setMessage(err?.message || 'Failed to prepare registration. Please try again.');
+                    setIsProcessingPayment(false);
+                    setSelectedPack(null);
+                    return;
+                }
+            } else {
+                setMessage('Error: Recruiter information missing. Please re-fill the form.');
+                setIsProcessingPayment(false);
+                setSelectedPack(null);
+                return;
+            }
+
+            // Create Stripe checkout session
+            console.log('Creating checkout session with:', sessionArg, 'pack_id:', packId);
+            const { url } = await apiService.createCheckoutSession(sessionArg as any, packId);
+            
+            // Redirect to Stripe checkout
+            console.log('Redirecting to Stripe checkout:', url);
+            window.location.href = url;
+        } catch (err: any) {
+            console.error('Error creating checkout session:', err);
+            setMessage(err.message || 'Failed to initiate payment. Please try again.');
+            setIsProcessingPayment(false);
+            setSelectedPack(null);
+        }
+    };
+
+    const getPackFeatures = (pack: any) => {
+        const features = [];
+        
+        if (pack.job_limit === 999 || pack.job_limit >= 100) {
+            features.push({ icon: '💼', text: 'Unlimited Job Postings' });
+        } else {
+            features.push({ icon: '💼', text: `${pack.job_limit} Job Postings` });
+        }
+
+        if (pack.candidate_limit >= 1000) {
+            features.push({ icon: '👥', text: `${pack.candidate_limit} Candidate Views` });
+        } else if (pack.candidate_limit >= 100) {
+            features.push({ icon: '👥', text: `${pack.candidate_limit} Candidate Views` });
+        } else {
+            features.push({ icon: '👥', text: `${pack.candidate_limit} Candidate Views` });
+        }
+
+        features.push({ icon: '📅', text: `${pack.visibility_days} Days Visibility` });
+        features.push({ icon: '✅', text: 'Priority Support' });
+
+        return features;
+    };
+
+    const getPackDescription = (packName: string) => {
+        const descriptions: Record<string, string> = {
+            basic: 'Pack Basic: 3 offres, visibilité 30 jours',
+            standard: 'Pack Standard: 10 offres, visibilité 60 jours, plus de candidats',
+            premium: 'Pack Premium: Illimité pendant 1 an'
+        };
+        return descriptions[packName.toLowerCase()] || '';
+    };
+
+    const getPackBadge = (packName: string) => {
+        const badges: Record<string, { text: string; color: string }> = {
+            standard: { text: 'RECOMMENDED', color: 'blue' },
+            premium: { text: 'MOST POPULAR', color: 'orange' }
+        };
+        return badges[packName.toLowerCase()];
+    };
+
+    const getButtonColor = (packName: string) => {
+        const colors: Record<string, string> = {
+            basic: 'purple',
+            standard: 'blue',
+            premium: 'orange'
+        };
+        return colors[packName.toLowerCase()] || 'blue';
     };
 
     const inputClasses = "w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 transition-shadow text-sm";
@@ -163,13 +355,13 @@ const App = () => {
             </style>
             
             {/* Main Content Grid - Stacks on mobile, splits on large screens */}
-            <div className="grid lg:grid-cols-2 w-full max-w-7xl shadow-2xl rounded-xl overflow-hidden my-4 lg:my-0 min-h-screen">
+            <div className={`grid ${userType === 'recruiter' ? 'w-full' : 'lg:grid-cols-2'} w-full max-w-7xl mx-auto shadow-2xl rounded-xl overflow-hidden my-4 lg:my-0 min-h-screen`}>
 
                 {/* Left Panel: Signup Form */}
-                <div className="flex flex-col p-8 sm:p-12 lg:p-16 bg-white overflow-y-auto">
+                <div className={`flex flex-col p-8 sm:p-12 lg:p-16 bg-white overflow-y-auto ${userType === 'recruiter' ? 'w-full' : ''}`}>
                     
                     {/* Logo and Navigation (Top Left) - Like Login Page */}
-                    <div className="absolute top-0 left-0 p-8 flex items-center">
+                    <div className="absolute top-0 left-0 p-4 sm:p-8 flex items-center z-10">
                         <Menu className="w-6 h-6 text-blue-600 mr-2 lg:hidden" />
                         <div className="flex items-center">
                             <div className="text-2xl mr-2">💼</div>
@@ -177,7 +369,7 @@ const App = () => {
                         </div>
                     </div>
 
-                    <div className="max-w-md w-full mx-auto">
+                    <div className={`${userType === 'recruiter' ? 'w-full max-w-6xl mx-auto' : 'max-w-md w-full mx-auto'}`}>
                         
                         <div className="flex justify-end mb-8">
                             {/* User Type Selector - Improved Design */}
@@ -185,7 +377,12 @@ const App = () => {
                                 <div className="flex bg-gray-100 rounded-lg p-1 shadow-sm">
                                     <button
                                         type="button"
-                                        onClick={() => setUserType('recruiter')}
+                                        onClick={() => {
+                                            setUserType('recruiter');
+                                            if (userType !== 'recruiter') {
+                                                loadPacks();
+                                            }
+                                        }}
                                         className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 flex items-center ${
                                             userType === 'recruiter'
                                                 ? 'bg-blue-600 text-white shadow-md'
@@ -211,15 +408,16 @@ const App = () => {
                             </div>
                         </div>
                         
-                        <h2 className="text-3xl font-extrabold text-gray-900 mb-2">Create account.</h2>
-                               <p className="text-sm text-gray-500 mb-6">
-                                   Already have an account?{" "}
-                                   <a href="/signin" className="text-blue-600 font-medium hover:text-blue-700 hover:underline transition-colors">
-                                       Log in
-                                   </a>
-                               </p>
+                        <div>
+                            <h2 className="text-3xl font-extrabold text-gray-900 mb-2">Create account.</h2>
+                            <p className="text-sm text-gray-500 mb-6">
+                                Already have an account?{" "}
+                                <a href="/signin" className="text-blue-600 font-medium hover:text-blue-700 hover:underline transition-colors">
+                                    Log in
+                                </a>
+                            </p>
 
-                        <form onSubmit={handleSignup} className="space-y-4">
+                            <form onSubmit={handleSignup} className="space-y-4">
                             
                             {/* Full Name */}
                             <input 
@@ -439,42 +637,157 @@ const App = () => {
                                 </div>
                             )}
                         </form>
+
+                        {/* Packs Section - Only show for recruiters */}
+                        {userType === 'recruiter' && (
+                            <div id="packs-section" className="mt-12 pt-12 border-t border-gray-200">
+                                <div className="text-center mb-8">
+                                    <h2 className="text-3xl sm:text-4xl font-extrabold text-gray-900 mb-3">
+                                        Choose Your Subscription Plan
+                                    </h2>
+                                    <p className="text-base sm:text-lg text-gray-600 max-w-2xl mx-auto">
+                                        Select a plan to complete your registration. Your account will be created after successful payment.
+                                    </p>
+                                </div>
+
+                                {isLoadingPacks ? (
+                                    <div className="text-center py-16">
+                                        <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent"></div>
+                                        <p className="mt-6 text-lg text-gray-600">Loading subscription plans...</p>
+                                    </div>
+                                ) : packs.length > 0 ? (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 mb-8">
+                                        {packs.map((pack) => {
+                                            const badge = getPackBadge(pack.name);
+                                            const buttonColor = getButtonColor(pack.name);
+                                            const features = getPackFeatures(pack);
+                                            const description = getPackDescription(pack.name);
+                                            const rawPrice = typeof pack.price === 'number' ? pack.price : parseFloat(String(pack.price));
+                                            const price = Number.isFinite(rawPrice) ? rawPrice : 0;
+                                            const isStandard = pack.name.toLowerCase() === 'standard';
+                                            const isPremium = pack.name.toLowerCase() === 'premium';
+
+                                            return (
+                                                <div 
+                                                    key={pack.id} 
+                                                    className={`relative bg-white rounded-2xl shadow-lg hover:shadow-2xl transform hover:-translate-y-2 transition-all duration-300 overflow-hidden ${
+                                                        isStandard ? 'border-2 border-blue-500 ring-2 ring-blue-200' : 
+                                                        isPremium ? 'border-2 border-orange-500 ring-2 ring-orange-200' : 
+                                                        'border border-gray-200'
+                                                    }`}
+                                                >
+                                                    {badge && (
+                                                        <div className={`absolute top-0 left-0 right-0 py-2 text-center text-xs font-bold text-white ${
+                                                            badge.color === 'blue' ? 'bg-blue-500' : 'bg-orange-500'
+                                                        }`}>
+                                                            {badge.text}
+                                                        </div>
+                                                    )}
+                                                    
+                                                    <div className={`p-6 sm:p-8 ${badge ? 'pt-12 sm:pt-14' : 'pt-6 sm:pt-8'}`}>
+                                                        <div className="text-center mb-6">
+                                                            <h3 className={`text-2xl sm:text-3xl font-extrabold mb-4 ${
+                                                                isStandard ? 'text-blue-600' : 
+                                                                isPremium ? 'text-orange-600' : 
+                                                                'text-gray-900'
+                                                            }`}>
+                                                                {pack.name.toUpperCase()}
+                                                            </h3>
+                                                            <div className="mb-4 flex items-baseline justify-center">
+                                                                <span className={`text-4xl sm:text-5xl font-extrabold ${
+                                                                    isStandard ? 'text-blue-600' : 
+                                                                    isPremium ? 'text-orange-600' : 
+                                                                    'text-gray-900'
+                                                                }`}>
+                                                                    ${price.toFixed(2)}
+                                                                </span>
+                                                                <span className="text-gray-600 ml-2 text-lg">/month</span>
+                                                            </div>
+                                                            <p className="text-sm text-gray-600 leading-relaxed">{description}</p>
+                                                        </div>
+
+                                                        <div className="space-y-4 mb-8 min-h-[200px]">
+                                                            {features.map((feature, index) => (
+                                                                <div key={index} className="flex items-start">
+                                                                    <span className="text-2xl mr-3 flex-shrink-0">{feature.icon}</span>
+                                                                    <span className="text-sm sm:text-base text-gray-700 leading-relaxed">{feature.text}</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+
+                                                        <button
+                                                            onClick={() => handlePackSelection(pack.id)}
+                                                            disabled={isProcessingPayment || selectedPack === pack.id || !pendingRecruiterPayload}
+                                                            className={`w-full py-4 rounded-xl font-semibold text-white text-base sm:text-lg transition-all shadow-lg hover:shadow-xl ${
+                                                                buttonColor === 'purple' ? 'bg-purple-600 hover:bg-purple-700' :
+                                                                buttonColor === 'blue' ? 'bg-blue-600 hover:bg-blue-700' :
+                                                                'bg-orange-600 hover:bg-orange-700'
+                                                            } disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-lg`}
+                                                        >
+                                                            {!pendingRecruiterPayload ? 'Fill form above first' :
+                                                            isProcessingPayment && selectedPack === pack.id ? (
+                                                                <span className="flex items-center justify-center">
+                                                                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                    </svg>
+                                                                    Processing...
+                                                                </span>
+                                                            ) : (
+                                                                'Subscribe Now'
+                                                            )}
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-16">
+                                        <p className="text-lg text-gray-600">No subscription plans available. Please contact support.</p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        </div>
                     </div>
                 </div>
 
-                {/* Right Panel: Marketing and Stats */}
-                <div className="checkerboard-bg hidden lg:flex flex-col justify-center items-center p-16 text-white relative">
-                    <div className="relative z-10 text-center">
-                        <h3 className="text-4xl font-extrabold leading-tight mb-10 max-w-sm">
-                            Over 1,75,324 candidates waiting for good employees.
-                        </h3>
-                        
-                        {/* Stat Cards Container */}
-                        <div className="grid grid-cols-3 gap-6 max-w-sm mt-12">
+                {/* Right Panel: Marketing and Stats (hidden for recruiters) */}
+                {userType !== 'recruiter' && (
+                    <div className="checkerboard-bg hidden lg:flex flex-col justify-center items-center p-16 text-white relative">
+                        <div className="relative z-10 text-center">
+                            <h3 className="text-4xl font-extrabold leading-tight mb-10 max-w-sm">
+                                Over 1,75,324 candidates waiting for good employees.
+                            </h3>
                             
-                            <StatCard 
-                                icon={Briefcase} 
-                                value="1,75,324" 
-                                label="Live Jobs" 
-                                color="text-sky-400"
-                            />
-                            <StatCard 
-                                icon={Building2} 
-                                value="97,354" 
-                                label="Companies" 
-                                color="text-teal-400"
-                            />
-                            <StatCard 
-                                icon={TrendingUp} 
-                                value="7,532" 
-                                label="New Jobs" 
-                                color="text-yellow-400"
-                            />
+                            {/* Stat Cards Container */}
+                            <div className="grid grid-cols-3 gap-6 max-w-sm mt-12">
+                                
+                                <StatCard 
+                                    icon={Briefcase} 
+                                    value="1,75,324" 
+                                    label="Live Jobs" 
+                                    color="text-sky-400"
+                                />
+                                <StatCard 
+                                    icon={Building2} 
+                                    value="97,354" 
+                                    label="Companies" 
+                                    color="text-teal-400"
+                                />
+                                <StatCard 
+                                    icon={TrendingUp} 
+                                    value="7,532" 
+                                    label="New Jobs" 
+                                    color="text-yellow-400"
+                                />
+                            </div>
                         </div>
+                        {/* Subtle dark overlay for better text readability */}
+                        <div className="absolute inset-0 bg-black/30"></div>
                     </div>
-                    {/* Subtle dark overlay for better text readability */}
-                    <div className="absolute inset-0 bg-black/30"></div>
-                </div>
+                )}
             </div>
         </div>
     );

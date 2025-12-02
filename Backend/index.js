@@ -1,6 +1,7 @@
 require('dotenv').config();
 console.log('DB_USER:', process.env.DB_USER);
 console.log('DB_PASSWORD:', process.env.DB_PASSWORD);
+console.log('CLIENT_URL:', process.env.CLIENT_URL);
 const express = require('express');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
@@ -28,6 +29,113 @@ if (paymentsDisabled) {
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Ensure pending_recruiters table exists (safe idempotent migration at startup)
+const ensurePendingTable = async () => {
+    try {
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS pending_recruiters (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                last_name VARCHAR(255) NOT NULL,
+                first_name VARCHAR(255) NOT NULL,
+                email VARCHAR(255) NOT NULL,
+                hashed_password VARCHAR(255) NOT NULL,
+                role VARCHAR(50) DEFAULT 'recruiter',
+                company_name VARCHAR(255),
+                industry VARCHAR(255),
+                description TEXT,
+                company_email VARCHAR(255),
+                company_address VARCHAR(255),
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        `);
+        console.log('✅ Pending recruiters table ensured');
+    } catch (err) {
+        console.error('Failed to ensure pending_recruiters table:', err && err.message ? err.message : err);
+    }
+};
+
+// Ensure saved_jobs table exists (safe idempotent migration at startup)
+const ensureSavedJobsTable = async () => {
+    try {
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS saved_jobs (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                candidate_id INT NOT NULL,
+                offer_id INT NOT NULL,
+                saved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY unique_saved_job (candidate_id, offer_id),
+                FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE,
+                FOREIGN KEY (offer_id) REFERENCES offers(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        `);
+        console.log('✅ Saved jobs table ensured');
+    } catch (err) {
+        console.error('Failed to ensure saved_jobs table:', err && err.message ? err.message : err);
+    }
+};
+
+// Ensure packs table exists (safe idempotent migration at startup)
+const ensurePacksTable = async () => {
+    try {
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS packs (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(50) NOT NULL,
+                price DECIMAL(10,2) NOT NULL DEFAULT 0,
+                job_limit INT NOT NULL DEFAULT 0,
+                candidate_limit INT NOT NULL DEFAULT 0,
+                visibility_days INT NOT NULL DEFAULT 30,
+                description TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        `);
+        
+        // Seed default packs if they don't exist
+        const [packs] = await db.query('SELECT COUNT(*) as count FROM packs');
+        if (packs[0].count === 0) {
+            await db.query(`
+                INSERT INTO packs (name, price, job_limit, candidate_limit, visibility_days, description)
+                VALUES 
+                ('basic', 0.00, 3, 100, 30, 'Pack de base - 3 offres'),
+                ('standard', 29.99, 10, 500, 60, 'Pack standard - 10 offres'),
+                ('premium', 79.99, 999, 5000, 365, 'Pack premium - offres illimitées');
+            `);
+            console.log('✅ Default packs seeded');
+        } else {
+            console.log('✅ Packs table ensured');
+        }
+    } catch (err) {
+        console.error('Failed to ensure packs table:', err && err.message ? err.message : err);
+    }
+};
+
+// Ensure recruiter_subscriptions table exists (safe idempotent migration at startup)
+const ensureSubscriptionsTable = async () => {
+    try {
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS recruiter_subscriptions (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                recruiter_id INT NOT NULL,
+                pack_id INT NOT NULL,
+                start_date DATE NOT NULL,
+                end_date DATE NOT NULL,
+                status ENUM('active','inactive','cancelled','expired') DEFAULT 'active',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (recruiter_id) REFERENCES recruiters(id) ON DELETE CASCADE,
+                FOREIGN KEY (pack_id) REFERENCES packs(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        `);
+        console.log('✅ Recruiter subscriptions table ensured');
+    } catch (err) {
+        console.error('Failed to ensure subscriptions table:', err && err.message ? err.message : err);
+    }
+};
+
+ensurePendingTable();
+ensureSavedJobsTable();
+ensurePacksTable();
+ensureSubscriptionsTable();
 
 // 🧩 Middlewares
 app.use(cors());
@@ -61,15 +169,9 @@ app.use('/api/auth', authRoutes);
 app.use('/api/candidates', candidateRoutes);
 app.use('/api/recruiters', recruiterRoutes);
 app.use('/api/admin', adminRoutes);
-// Mount payment routes only when payments are enabled
-if (!paymentsDisabled) {
-    app.use('/api/payments', paymentRoutes);
-} else {
-    // Optional: expose a small endpoint to indicate payments are disabled
-    app.use('/api/payments', (req, res) => {
-        res.status(503).json({ status: 'UNAVAILABLE', message: 'Payments are temporarily disabled' });
-    });
-}
+// Mount payment routes
+// Note: getPacks route is always available, but payment routes require Stripe
+app.use('/api/payments', paymentRoutes);
 
 // Appliquer le rate limiter uniquement sur la création d'offres
 app.use('/api/recruiters/:recruiterId/offers', offerLimiter);
@@ -103,6 +205,27 @@ app.get('/', (req, res) => {
             protected: '/api/protected'
         }
     });
+});
+
+// 🔄 Route de redirection pour payment-success (Stripe redirige ici)
+app.get('/payment-success', (req, res) => {
+    const sessionId = req.query.session_id;
+    // Force l'URL du frontend pour éviter les boucles de redirection
+    const frontendUrl = 'http://localhost:5173';
+    console.log('🔄 Redirecting payment-success to frontend:', frontendUrl, '| Session ID:', sessionId);
+    if (sessionId) {
+        res.redirect(`${frontendUrl}/payment-success?session_id=${sessionId}`);
+    } else {
+        res.redirect(`${frontendUrl}/payment-success`);
+    }
+});
+
+// 🔄 Route de redirection pour payment-cancel
+app.get('/payment-cancel', (req, res) => {
+    // Force l'URL du frontend pour éviter les boucles de redirection
+    const frontendUrl = 'http://localhost:5173';
+    console.log('🔄 Redirecting payment-cancel to frontend:', frontendUrl);
+    res.redirect(`${frontendUrl}/payment-cancel`);
 });
 
 // 🩺 Health check DB

@@ -66,11 +66,10 @@ const Settings: React.FC<SettingsProps> = ({ user }) => {
           confirmPassword: ''
         }));
       } else {
-        // If only name/email are updated (for admin self-update if applicable)
+        // If only name is updated (email removed for recruiters)
         await apiService.updateUserProfile(user.id, {
           first_name: formData.firstName,
           last_name: formData.lastName,
-          email: formData.email,
         });
         setSaveMessage('✓ Personal info updated successfully');
       }
@@ -150,16 +149,7 @@ const Settings: React.FC<SettingsProps> = ({ user }) => {
                   />
                 </div>
               </div>
-              <div className="form-group">
-                <label>Email</label>
-                <input
-                  type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleInputChange}
-                  placeholder="Enter email"
-                />
-              </div>
+              {/* Email field removed for recruiters - they cannot change their email */}
 
               {/* Password Change */}
               <div className="settings-subsection">

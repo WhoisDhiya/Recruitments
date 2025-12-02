@@ -829,6 +829,146 @@ class ApiService {
     }
     return [];
   }
+
+  // ===== SUBSCRIPTION & PAYMENT =====
+  async getPacks(): Promise<any[]> {
+    const url = `${API_BASE_URL}/payments/packs`;
+    console.log('Fetching packs from:', url);
+    
+    try {
+      const response = await fetch(url, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      console.log('Packs response status:', response.status);
+      
+      const data = await response.json();
+      console.log('Packs response data:', data);
+      
+      if (!response.ok) {
+        throw new Error(data.message || `Failed to fetch packs: ${response.status}`);
+      }
+      
+      if (data.status === 'SUCCESS' && data.data) {
+        return data.data;
+      }
+      
+      if (data.status === 'ERROR') {
+        throw new Error(data.message || 'Failed to fetch packs');
+      }
+      
+      return [];
+    } catch (error: any) {
+      console.error('Error in getPacks:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create a checkout session.
+   * recruiterOrPayload can be a recruiterId (number) or a recruiter payload object (to create after payment)
+   */
+  async createCheckoutSession(recruiterOrPayload: number | Record<string, any> | null, packId: number): Promise<{ url: string }> {
+    const url = `${API_BASE_URL}/payments/create-checkout-session`;
+    const token = localStorage.getItem('token') || this.token;
+    if (token) this.token = token;
+
+    const bodyPayload: Record<string, any> = { pack_id: packId };
+    if (typeof recruiterOrPayload === 'number') {
+      // Ambiguous number - assume it's an existing recruiter id
+      bodyPayload.recruiter_id = recruiterOrPayload;
+    } else if (recruiterOrPayload && typeof recruiterOrPayload === 'object') {
+      // If object includes pending_id, forward as pending_id, otherwise forward as recruiter_payload
+      if ('pending_id' in recruiterOrPayload) bodyPayload.pending_id = (recruiterOrPayload as any).pending_id;
+      else bodyPayload.recruiter_payload = recruiterOrPayload;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+      body: JSON.stringify(bodyPayload),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || 'Failed to create checkout session');
+    }
+
+    return { url: data.url };
+  }
+
+  // Create a pending recruiter on the server (stores hashed password) and return pending_id
+  async createPendingRecruiter(payload: Record<string, any>): Promise<{ pending_id: number }> {
+    const url = `${API_BASE_URL}/payments/pending-recruiters`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.message || 'Failed to create pending recruiter');
+    }
+    return { pending_id: data.pending_id };
+  }
+
+  async handlePaymentSuccess(sessionId: string): Promise<{ success: boolean; message: string }> {
+    const url = `${API_BASE_URL}/payments/payment-success`;
+    const token = localStorage.getItem('token') || this.token;
+    if (token) this.token = token;
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+      body: JSON.stringify({ session_id: sessionId }),
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.message || 'Payment verification failed');
+    }
+    // If backend returned a token/user, save it so the user is authenticated after payment
+    if (data.token && data.user) {
+      this.token = data.token;
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+    }
+
+    return { success: data.success, message: data.message };
+  }
+
+  async checkActiveSubscription(recruiterId: number): Promise<{ hasActiveSubscription: boolean; data?: any }> {
+    const url = `${API_BASE_URL}/payments/subscription/${recruiterId}`;
+    const token = localStorage.getItem('token') || this.token;
+    if (token) this.token = token;
+    
+    const response = await fetch(url, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.message || 'Failed to check subscription');
+    }
+    
+    return { hasActiveSubscription: data.hasActiveSubscription, data: data.data };
+  }
 }
 
 export const apiService = new ApiService();

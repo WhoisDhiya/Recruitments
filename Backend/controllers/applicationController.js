@@ -116,31 +116,50 @@ const updateApplicationStatus = async (req, res) => {
         }
 
         // 2. Récupérer recruiter_id via table recruiters
+        console.log('🔍 Checking application update - User ID:', userId, 'Application ID:', applicationId);
         const [recRows] = await db.query(
             "SELECT id FROM recruiters WHERE user_id = ?",
             [userId]
         );
 
         if (recRows.length === 0) {
+            console.error('❌ User is not a recruiter:', userId);
             return res.status(400).json({ message: "Ce user n'est pas un recruteur" });
         }
 
         const recruiterId = recRows[0].id;
+        console.log('✅ Recruiter ID found:', recruiterId);
 
         // 3. Vérifier que la candidature appartient à une offre du recruteur
+        // Amélioration : récupérer plus d'infos pour le débogage
         const [appRows] = await db.query(
-            `SELECT a.id 
+            `SELECT a.id, a.offer_id, o.recruiter_id, o.title
              FROM applications a
              JOIN offers o ON o.id = a.offer_id
-             WHERE a.id = ? AND o.recruiter_id = ?`,
-            [applicationId, recruiterId]
+             WHERE a.id = ?`,
+            [applicationId]
         );
 
+        console.log('🔍 Application details:', appRows);
+
         if (appRows.length === 0) {
+            console.error('❌ Application not found:', applicationId);
+            return res.status(404).json({
+                message: "Candidature introuvable"
+            });
+        }
+
+        const application = appRows[0];
+        console.log('🔍 Application offer recruiter_id:', application.recruiter_id, 'vs Current recruiter_id:', recruiterId);
+
+        if (application.recruiter_id !== recruiterId) {
+            console.error('❌ Permission denied - Application belongs to recruiter:', application.recruiter_id, 'but current user is:', recruiterId);
             return res.status(403).json({
                 message: "Vous ne pouvez modifier que les candidatures de vos propres offres"
             });
         }
+
+        console.log('✅ Permission granted - Application belongs to this recruiter');
 
         // 4. Vérifier statut valide
         const validStatus = ["pending", "accepted", "rejected"];
@@ -170,6 +189,7 @@ const updateApplicationStatus = async (req, res) => {
 
         if (candidateInfoRows.length) {
             const info = candidateInfoRows[0];
+            console.log('📧 Candidate info for notification:', info);
             
             // Messages en français selon le statut
             let subject = '';
@@ -181,6 +201,9 @@ const updateApplicationStatus = async (req, res) => {
             } else if (status === 'rejected') {
                 subject = '❌ Candidature refusée';
                 message = `Votre candidature pour le poste "${info.title}" a été refusée. Ne vous découragez pas et continuez vos recherches !`;
+            } else if (status === 'pending') {
+                subject = '⏳ Candidature en attente';
+                message = `Votre candidature pour le poste "${info.title}" est en attente d'examen. Vous serez notifié dès qu'une décision sera prise.`;
             } else if (status === 'reviewed') {
                 subject = '👀 Candidature en cours d\'examen';
                 message = `Votre candidature pour le poste "${info.title}" est en cours d'examen. Vous serez notifié dès qu'une décision sera prise.`;
@@ -189,15 +212,22 @@ const updateApplicationStatus = async (req, res) => {
                 message = `Le statut de votre candidature pour "${info.title}" a été mis à jour.`;
             }
             
-            await Notification.create({
-                user_id: info.user_id,
-                application_id: applicationId,
-                email: info.email,
-                subject: subject,
-                message: message
-            });
-            
-            console.log(`✅ Notification envoyée au candidat ${info.user_id} pour la candidature ${applicationId} (statut: ${status})`);
+            try {
+                const notificationId = await Notification.create({
+                    user_id: info.user_id,
+                    application_id: applicationId,
+                    email: info.email,
+                    subject: subject,
+                    message: message
+                });
+                
+                console.log(`✅ Notification créée avec succès (ID: ${notificationId}) pour le candidat ${info.user_id} (${info.email}) - Candidature ${applicationId} (statut: ${status})`);
+            } catch (notifError) {
+                console.error('❌ Erreur lors de la création de la notification:', notifError);
+                // Ne pas bloquer la mise à jour du statut si la notification échoue
+            }
+        } else {
+            console.warn('⚠️ Aucune information candidat trouvée pour la candidature:', applicationId);
         }
 
         return res.json({ message: "Statut mis à jour avec succès" });

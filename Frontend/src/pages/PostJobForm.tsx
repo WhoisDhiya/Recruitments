@@ -149,8 +149,9 @@ const PostJobForm: React.FC<PostJobFormProps> = ({ user, onLogout, editJobId, on
         const exp = new Date(formData.expirationDate);
         const today = new Date();
         today.setHours(0, 0, 0, 0);
+        exp.setHours(0, 0, 0, 0);
         if (isNaN(exp.getTime()) || exp <= today) {
-          alert('Expiration date must be later than today.');
+          alert('La date d\'expiration doit être supérieure à aujourd\'hui.');
           setIsSubmitting(false);
           return;
         }
@@ -440,6 +441,7 @@ const PostJobForm: React.FC<PostJobFormProps> = ({ user, onLogout, editJobId, on
                 name="expirationDate"
                 value={formData.expirationDate}
                 onChange={handleChange}
+                min={new Date().toISOString().split('T')[0]}
               />
             </div>
             <div className="form-section">

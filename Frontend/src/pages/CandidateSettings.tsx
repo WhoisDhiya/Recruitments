@@ -203,7 +203,18 @@ const CandidateSettings: React.FC<CandidateSettingsProps> = ({ user, onLogout })
       setSaveMessage('✓ Modifications enregistrées avec succès');
       setTimeout(() => setSaveMessage(''), 3000);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Erreur lors de l\'enregistrement';
+      let errorMessage = 'Erreur lors de l\'enregistrement';
+      if (error instanceof Error) {
+        // Check if it's an email already used error
+        if (error.message.toLowerCase().includes('email') && 
+            (error.message.toLowerCase().includes('déjà utilisé') || 
+             error.message.toLowerCase().includes('already used') ||
+             error.message.toLowerCase().includes('déjà existant'))) {
+          errorMessage = 'Cet email est déjà utilisé. Veuillez choisir un autre email.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
       setSaveMessage(`❌ ${errorMessage}`);
     } finally {
       setIsSaving(false);

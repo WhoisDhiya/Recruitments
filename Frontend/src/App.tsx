@@ -21,6 +21,8 @@ import CandidateSettings from './pages/CandidateSettings.tsx';
 import CandidateNotifications from './pages/CandidateNotifications.tsx';
 import CustomerSupport from './pages/CustomerSupport.tsx';
 import AppliedJobs from './pages/AppliedJobs.tsx';
+import SubscriptionPlans from './pages/SubscriptionPlans.tsx';
+import PaymentSuccess from './pages/PaymentSuccess.tsx';
 
 //Added MyJobs route in App.tsx and imported MyJobs.
 //Updated PostJobPage.tsx sidebar handler so clicking "My Jobs" navigates to /my-jobs.
@@ -191,6 +193,21 @@ function App() {
             isAuthenticated && user?.role === 'candidate'
               ? <CustomerSupport user={user || undefined} onLogout={handleLogout} />
               : <Navigate to="/signin" />
+          } />
+          <Route path="/subscription-plans" element={
+            isAuthenticated && user?.role === 'recruiter'
+              ? <SubscriptionPlans user={user || undefined} onLogout={handleLogout} />
+              : <Navigate to="/signin" />
+          } />
+          <Route path="/payment-success" element={<PaymentSuccess />} />
+          <Route path="/payment-cancel" element={
+            <div style={{ padding: '40px', textAlign: 'center' }}>
+              <h2>Payment Cancelled</h2>
+              <p>Your payment was cancelled. You can try again later.</p>
+              <button onClick={() => window.location.href = '/subscription-plans'}>
+                Return to Plans
+              </button>
+            </div>
           } />
         </Routes>
       </div>

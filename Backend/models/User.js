@@ -26,10 +26,31 @@ class User {
     // Mettre à jour le profil utilisateur
     static async updateProfile(id, userData) {
         const { last_name, first_name, email } = userData;
-        const [result] = await db.query(
-            'UPDATE users SET last_name = ?, first_name = ?, email = ? WHERE id = ?',
-            [last_name, first_name, email, id]
-        );
+        
+        // Construire la requête dynamiquement selon les champs fournis
+        const updates = [];
+        const values = [];
+        
+        if (last_name !== undefined) {
+            updates.push('last_name = ?');
+            values.push(last_name);
+        }
+        if (first_name !== undefined) {
+            updates.push('first_name = ?');
+            values.push(first_name);
+        }
+        if (email !== undefined) {
+            updates.push('email = ?');
+            values.push(email);
+        }
+        
+        if (updates.length === 0) {
+            return false; // Aucune mise à jour à faire
+        }
+        
+        values.push(id);
+        const query = `UPDATE users SET ${updates.join(', ')} WHERE id = ?`;
+        const [result] = await db.query(query, values);
         return result.affectedRows > 0;
     }
 

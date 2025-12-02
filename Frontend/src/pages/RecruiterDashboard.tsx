@@ -6,6 +6,7 @@ import Settings from './Settings';
 import Homepage from './homepage';
 import EmployerProfile from './EmployerProfile';
 import PostJobForm from './PostJobForm';
+import SubscriptionPlans from './SubscriptionPlans';
 import { apiService } from '../services/api';
 
 interface CandidateSummary {
@@ -101,6 +102,19 @@ const RecruiterDashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
         const recruiter = await apiService.getRecruiterByUserId(user.id);
         recruiterIdentifier = recruiter.id;
         setRecruiterId(recruiter.id);
+        
+        // Check if recruiter has an active subscription
+        try {
+          const subscriptionCheck = await apiService.checkActiveSubscription(recruiter.id);
+          if (!subscriptionCheck.hasActiveSubscription) {
+            // No active subscription, redirect to subscription plans
+            navigate('/subscription-plans');
+            return;
+          }
+        } catch (subError) {
+          console.error('Error checking subscription:', subError);
+          // If check fails, allow access but log the error
+        }
       } catch (error) {
         console.error('Error fetching recruiter profile:', error);
         setIsLoading(false);
@@ -349,6 +363,42 @@ const RecruiterDashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
     );
   };
 
+  const handleAcceptApplication = async (applicationId: number) => {
+    try {
+      await apiService.updateApplicationStatus(applicationId, 'accepted');
+      // Reload applications to update status
+      await loadDashboardData();
+      alert('Application accepted successfully!');
+    } catch (error: any) {
+      console.error('Error accepting application:', error);
+      alert(error.message || 'Failed to accept application');
+    }
+  };
+
+  const handleRejectApplication = async (applicationId: number) => {
+    try {
+      await apiService.updateApplicationStatus(applicationId, 'rejected');
+      // Reload applications to update status
+      await loadDashboardData();
+      alert('Application rejected');
+    } catch (error: any) {
+      console.error('Error rejecting application:', error);
+      alert(error.message || 'Failed to reject application');
+    }
+  };
+
+  const handleResetToPending = async (applicationId: number) => {
+    try {
+      await apiService.updateApplicationStatus(applicationId, 'pending');
+      // Reload applications to update status
+      await loadDashboardData();
+      alert('Application status reset to pending');
+    } catch (error: any) {
+      console.error('Error resetting application:', error);
+      alert(error.message || 'Failed to reset application status');
+    }
+  };
+
   const handleTopNavClick = (itemId: string) => {
     switch (itemId) {
       case 'Home':
@@ -541,20 +591,48 @@ const RecruiterDashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
                 <div className="candidate-meta">
                   <span>{candidate.email}</span>
                   <span>{candidate.appliedDate}</span>
-                  <span className={`status-badge ${candidate.status}`}>
-                    {candidate.status}
+                  <span className={`status-badge ${candidate.status === 'accepted' ? 'accepted' : candidate.status === 'rejected' ? 'rejected' : 'pending'}`}>
+                    {candidate.status === 'accepted' ? '✓ Accepted' : candidate.status === 'rejected' ? '✗ Rejected' : '⏳ Pending'}
                   </span>
                 </div>
 
                 <div className="candidate-actions">
                   {options.allowSave && (
-                    <button
-                      className={`btn-primary ${saved ? 'btn-disabled' : ''}`}
-                      onClick={() => handleSaveCandidate(candidate)}
-                      disabled={saved}
-                    >
-                      {saved ? 'Saved' : 'Save candidate'}
-                    </button>
+                    <>
+                      <button
+                        className={`btn-accept ${candidate.status === 'accepted' ? 'btn-active' : ''}`}
+                        onClick={() => handleAcceptApplication(candidate.applicationId)}
+                        disabled={candidate.status === 'accepted'}
+                        title="Accept this application"
+                      >
+                        {candidate.status === 'accepted' ? '✓ Accepted' : '✓ Accept'}
+                      </button>
+                      <button
+                        className={`btn-reject ${candidate.status === 'rejected' ? 'btn-active' : ''}`}
+                        onClick={() => handleRejectApplication(candidate.applicationId)}
+                        disabled={candidate.status === 'rejected'}
+                        title="Reject this application"
+                      >
+                        {candidate.status === 'rejected' ? '✗ Rejected' : '✗ Reject'}
+                      </button>
+                      {(candidate.status === 'accepted' || candidate.status === 'rejected') && (
+                        <button
+                          className="btn-secondary"
+                          onClick={() => handleResetToPending(candidate.applicationId)}
+                          title="Reset to pending status"
+                        >
+                          ↺ Reset to Pending
+                        </button>
+                      )}
+                      <button
+                        className={`btn-primary ${saved ? 'btn-disabled' : ''}`}
+                        onClick={() => handleSaveCandidate(candidate)}
+                        disabled={saved}
+                        title="Save candidate for later"
+                      >
+                        {saved ? '✓ Saved' : '⭐ Save candidate'}
+                      </button>
+                    </>
                   )}
                   {options.allowRemove && (
                     <button
@@ -673,7 +751,11 @@ const RecruiterDashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
           </div>
         );
       case 'Plans_Billing':
-        return renderComingSoon('Plans & Billing');
+        return (
+          <div className="embedded-section">
+            <SubscriptionPlans user={user} onLogout={onLogout} />
+          </div>
+        );
       case 'All_Companies':
         return renderComingSoon('All Companies');
       case 'Customer_Supports':

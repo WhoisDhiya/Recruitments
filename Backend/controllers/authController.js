@@ -220,6 +220,17 @@ exports.updateUserProfile = async (req, res) => {
 
         // Mise à jour des informations de base
         if (first_name !== undefined || last_name !== undefined || email !== undefined) {
+            // Vérifier si l'email est modifié et s'il existe déjà
+            if (email !== undefined && email !== user.email) {
+                const existingUser = await User.findByEmail(email);
+                if (existingUser) {
+                    return res.status(409).json({
+                        status: 'ERROR',
+                        message: 'Cet email est déjà utilisé'
+                    });
+                }
+            }
+
             const updateData = {};
             if (first_name !== undefined) updateData.first_name = first_name;
             if (last_name !== undefined) updateData.last_name = last_name;
