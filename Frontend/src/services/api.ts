@@ -449,6 +449,14 @@ class ApiService {
     return response.data!;
   }
 
+  async getApplicationDetails(applicationId: number): Promise<any> {
+    const response = await this.request<{ data?: any }>(`/applications/${applicationId}/details`);
+    if (response.data) {
+      return response.data;
+    }
+    throw new Error('Application details not found');
+  }
+
   // ===== CANDIDATE PROFILE =====
   async getCandidateByUserId(userId: number): Promise<{ id: number; user_id: number; [key: string]: any }> {
     // La route backend est /candidates/profile/user/:userId
