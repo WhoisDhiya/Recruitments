@@ -1,6 +1,7 @@
 const express = require('express');
 const { body, param, validationResult } = require('express-validator');
 const offerController = require('../controllers/offerController');
+const auth = require('../middleware/auth');
 const router = express.Router();
 
 // <CHANGE> Updated validation to separate Offer fields from Requirement fields
@@ -111,6 +112,6 @@ router.get('/offers/:id', offerController.getOfferById);
 router.put('/offers/:id', offerController.updateOffer);
 router.delete('/offers/:id', offerController.deleteOffer);
 
-router.get('/offers/:id/applications', offerController.getApplicationsByOffer);
+router.get('/offers/:id/applications', auth, offerController.getApplicationsByOffer);
 
 module.exports = router;

@@ -382,12 +382,45 @@ exports.deleteOffer = async (req, res) => {
 exports.getApplicationsByOffer = async (req, res) => {
     try {
         const { id } = req.params;
+        const userId = req.user?.user_id;
+        const userRole = req.user?.role;
+
+        // Vérifier que c'est un recruteur
+        if (userRole !== "recruiter") {
+            return res.status(403).json({
+                status: "ERROR",
+                message: "Accès refusé : réservé aux recruteurs"
+            });
+        }
 
         const offer = await Offer.findById(id);
         if (!offer) {
             return res.status(404).json({
                 status: "ERROR",
                 message: `Offre avec ID ${id} non trouvée`
+            });
+        }
+
+        // Vérifier que le recruteur connecté est le propriétaire de l'offre
+        const db = require("../config/database");
+        const [recruiterRows] = await db.query(
+            "SELECT id FROM recruiters WHERE user_id = ?",
+            [userId]
+        );
+
+        if (recruiterRows.length === 0) {
+            return res.status(400).json({
+                status: "ERROR",
+                message: "Ce user n'est pas un recruteur"
+            });
+        }
+
+        const recruiterId = recruiterRows[0].id;
+
+        if (offer.recruiter_id !== recruiterId) {
+            return res.status(403).json({
+                status: "ERROR",
+                message: "Vous ne pouvez voir que les candidatures de vos propres offres"
             });
         }
 

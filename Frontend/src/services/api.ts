@@ -428,10 +428,43 @@ class ApiService {
     return [];
   }
 
-  async createApplication(offerId: number): Promise<{ id: number; message: string }> {
+  async createApplication(
+    offerId: number,
+    applicationData?: {
+      phone?: string;
+      address?: string;
+      portfolio_url?: string;
+      cover_letter?: string;
+      cv_file?: string; // Base64 data URI format
+    }
+  ): Promise<{ id: number; message: string }> {
+    const payload: any = { offer_id: offerId };
+    
+    // Toujours envoyer tous les champs avec leurs valeurs réelles
+    // Le backend normalisera les chaînes vides en null
+    if (applicationData) {
+      // Envoyer les valeurs telles qu'elles sont (même si vides)
+      // Le backend convertira les chaînes vides en null
+      payload.phone = applicationData.phone !== undefined && applicationData.phone !== null ? String(applicationData.phone).trim() : null;
+      payload.address = applicationData.address !== undefined && applicationData.address !== null ? String(applicationData.address).trim() : null;
+      payload.portfolio_url = applicationData.portfolio_url !== undefined && applicationData.portfolio_url !== null && String(applicationData.portfolio_url).trim() !== '' ? String(applicationData.portfolio_url).trim() : null;
+      payload.cover_letter = applicationData.cover_letter !== undefined && applicationData.cover_letter !== null ? String(applicationData.cover_letter).trim() : null;
+      // Le CV est envoyé en base64 (data URI), on l'envoie tel quel
+      payload.cv_file = applicationData.cv_file !== undefined && applicationData.cv_file !== null && String(applicationData.cv_file).trim() !== '' ? String(applicationData.cv_file).trim() : null;
+    } else {
+      // Si applicationData n'est pas fourni, initialiser avec null
+      payload.phone = null;
+      payload.address = null;
+      payload.portfolio_url = null;
+      payload.cover_letter = null;
+      payload.cv_file = null;
+    }
+    
+    console.log('📤 API: Sending application data:', JSON.stringify(payload, null, 2));
+    
     const response = await this.request<{ id: number; message: string }>('/applications', {
       method: 'POST',
-      body: JSON.stringify({ offer_id: offerId }),
+      body: JSON.stringify(payload),
     });
     return response.data!;
   }
@@ -442,19 +475,135 @@ class ApiService {
   }
 
   async updateApplicationStatus(applicationId: number, status: string): Promise<{ message: string }> {
-    const response = await this.request<{ message: string }>(`/applications/${applicationId}/status`, {
-      method: 'PUT',
-      body: JSON.stringify({ status }),
-    });
-    return response.data!;
+    console.log('🔄 API: Updating application status', { applicationId, status });
+    try {
+      const response = await this.request<{ message: string }>(`/applications/${applicationId}/status`, {
+        method: 'PUT',
+        body: JSON.stringify({ status }),
+      });
+      console.log('✅ API: Application status updated successfully');
+      return response.data!;
+    } catch (error: any) {
+      console.error('❌ API: Error updating application status:', error);
+      throw error;
+    }
   }
 
   async getApplicationDetails(applicationId: number): Promise<any> {
-    const response = await this.request<{ data?: any }>(`/applications/${applicationId}/details`);
-    if (response.data) {
-      return response.data;
+    // Route pour les recruteurs : /applications/:id/details
+    const url = `${API_BASE_URL}/applications/${applicationId}/details`;
+    const token = localStorage.getItem('token') || this.token;
+    if (token) this.token = token;
+    
+    console.log('🔍 API: Fetching application details for recruiter, applicationId:', applicationId);
+    
+    const response = await fetch(url, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    });
+    
+    const data = await response.json();
+    console.log('🔍 API: Response status:', response.status);
+    console.log('🔍 API: Response data:', JSON.stringify(data, null, 2));
+    
+    if (!response.ok) {
+      const errorMessage = data.message || data.error || 'Failed to fetch application details';
+      console.error('❌ API: Error fetching application details:', errorMessage);
+      throw new Error(errorMessage);
     }
-    throw new Error('Application details not found');
+    
+    // Le backend retourne { status: "SUCCESS", data: {...} }
+    if (data.status === 'SUCCESS' && data.data) {
+      console.log('✅ API: Successfully retrieved application details');
+      return data.data;
+    }
+    
+    // Si le backend retourne directement les données sans wrapper
+    if (data.id && data.status) {
+      console.log('✅ API: Data found directly in response');
+      return data;
+    }
+    
+    console.error('❌ API: Unexpected response format:', data);
+    throw new Error(data.message || 'Application details not found');
+  }
+
+  async getApplicationById(applicationId: number): Promise<any> {
+    // Route pour les candidats : /applications/:id
+    const url = `${API_BASE_URL}/applications/${applicationId}`;
+    const token = localStorage.getItem('token') || this.token;
+    if (token) this.token = token;
+    
+    console.log('🔍 API: Fetching application', applicationId, 'from', url);
+    
+    const response = await fetch(url, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    });
+    
+    console.log('🔍 API: Response status', response.status, response.statusText);
+    
+    const data = await response.json();
+    console.log('🔍 API: Response data', JSON.stringify(data, null, 2));
+    console.log('🔍 API: data.status =', data.status);
+    console.log('🔍 API: data.data =', data.data);
+    console.log('🔍 API: typeof data =', typeof data);
+    console.log('🔍 API: data keys =', Object.keys(data));
+    
+    if (!response.ok) {
+      // Si le backend retourne un status ERROR dans le body même avec un status HTTP non-ok
+      if (data.status === 'ERROR') {
+        console.error('❌ API: Backend returned ERROR status:', data.message);
+        console.error('❌ API: Error details:', data.error);
+        console.error('❌ API: Full error response:', JSON.stringify(data, null, 2));
+        // Inclure les détails de l'erreur si disponibles
+        const errorMessage = data.error ? `${data.message || 'Erreur serveur'}: ${data.error}` : (data.message || 'Erreur serveur');
+        throw new Error(errorMessage);
+      }
+      console.error('❌ API: HTTP error:', response.status, data.message);
+      console.error('❌ API: Error data:', JSON.stringify(data, null, 2));
+      const errorMessage = data.error ? `${data.message || 'Erreur serveur'}: ${data.error}` : (data.message || `Failed to fetch application: ${response.status}`);
+      throw new Error(errorMessage);
+    }
+    
+    // Le backend retourne { status: "SUCCESS", data: {...} }
+    if (data.status === 'SUCCESS') {
+      if (data.data) {
+        console.log('✅ API: Successfully retrieved application data');
+        return data.data;
+      } else {
+        console.warn('⚠️ API: Backend returned SUCCESS but data is null/undefined');
+        // Si data.data est null/undefined, peut-être que les données sont directement dans data
+        if (data.id || data.application_id) {
+          console.log('✅ API: Data found directly in response object');
+          return data;
+        }
+        throw new Error('Application data is missing in response');
+      }
+    }
+    
+    // Si le backend retourne directement les données sans wrapper (fallback)
+    if (data.id && (data.status || data.application_status) && (data.date_application || data.applied_at)) {
+      console.log('✅ API: Backend returned data directly (without wrapper), using it');
+      return data;
+    }
+    
+    // Si le backend retourne un status ERROR même avec un status HTTP ok
+    if (data.status === 'ERROR') {
+      console.error('❌ API: Backend returned ERROR status with HTTP 200:', data.message);
+      console.error('❌ API: Error details:', data.error);
+      console.error('❌ API: Full error response:', JSON.stringify(data, null, 2));
+      throw new Error(data.message || data.error || 'Application not found');
+    }
+    
+    // Si la structure n'est pas celle attendue, logger pour debug
+    console.error('❌ API: Unexpected response format:', data);
+    console.error('❌ API: Full response object:', JSON.stringify(data, null, 2));
+    throw new Error(data.message || 'Application not found - unexpected response format');
   }
 
   // ===== CANDIDATE PROFILE =====

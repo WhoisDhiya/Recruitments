@@ -160,9 +160,42 @@ const JobApplicationPage: React.FC<JobApplicationPageProps> = ({ user, isAuthent
       }
 
       console.log('📨 Submitting application for job:', jobId);
+      console.log('📋 Form data being sent:', {
+        phone: formData.phone,
+        address: formData.address,
+        portfolio: formData.portfolio,
+        coverLetter: formData.coverLetter ? formData.coverLetter.substring(0, 50) + '...' : 'empty',
+        cvFile: formData.cvFile ? formData.cvFile.name : 'no file'
+      });
 
-      // Call backend API to create application (only offer_id required)
-      const application = await apiService.createApplication(parseInt(jobId));
+      // Convertir le CV en base64 si un fichier est fourni
+      let cvFileBase64: string | undefined = undefined;
+      if (formData.cvFile) {
+        try {
+          cvFileBase64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              const result = reader.result as string;
+              resolve(result); // Format: "data:application/pdf;base64,..."
+            };
+            reader.onerror = () => reject(new Error('Erreur lors de la lecture du fichier CV'));
+            reader.readAsDataURL(formData.cvFile!);
+          });
+          console.log('✅ CV converted to base64, length:', cvFileBase64.length);
+        } catch (err) {
+          console.error('❌ Error converting CV to base64:', err);
+          throw new Error('Erreur lors de la conversion du CV. Veuillez réessayer.');
+        }
+      }
+
+      // Call backend API to create application with all form data including CV
+      const application = await apiService.createApplication(parseInt(jobId), {
+        phone: formData.phone.trim(),
+        address: formData.address.trim(),
+        portfolio_url: formData.portfolio.trim() || undefined,
+        cover_letter: formData.coverLetter.trim(),
+        cv_file: cvFileBase64
+      });
 
       console.log('✅ Application submitted successfully:', application);
       setSuccessMessage('✅ Candidature envoyée avec succès ! Nous examinerons votre candidature et vous recontacterons bientôt.');

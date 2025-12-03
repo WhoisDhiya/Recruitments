@@ -28,6 +28,11 @@ interface ApplicationDetails {
   id: number;
   status: string;
   date_application: string;
+  phone?: string;
+  address?: string;
+  portfolio_url?: string;
+  cover_letter?: string;
+  cv_file?: string; // CV spécifique à la candidature (base64)
   offer_id: number;
   offer_title: string;
   offer_description?: string;
@@ -36,7 +41,7 @@ interface ApplicationDetails {
   salary_max?: number;
   salary_type?: string;
   candidate_id: number;
-  cv?: string;
+  cv?: string; // CV du profil candidat
   image?: string;
   candidate_first_name: string;
   candidate_last_name: string;
@@ -182,28 +187,41 @@ const RecruiterDashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
           applicationCount = applications.length;
 
           applications.forEach((app: any) => {
+            // Utiliser application_id ou id (selon la structure retournée)
+            const applicationId = app.application_id || app.id;
             const candidateInfo = app.candidate || app;
             const name =
               candidateInfo?.first_name && candidateInfo?.last_name
                 ? `${candidateInfo.first_name} ${candidateInfo.last_name}`
+                : app.candidate_first_name && app.candidate_last_name
+                ? `${app.candidate_first_name} ${app.candidate_last_name}`
                 : candidateInfo?.name ||
                   `${app.candidate_first_name || 'Candidate'} ${app.candidate_last_name || ''}`.trim();
             const email =
+              app.candidate_email ||
               candidateInfo?.email ||
               candidateInfo?.user?.email ||
-              app.candidate_email ||
               app.email ||
               'Not provided';
 
+            console.log('📋 Frontend: Processing application:', {
+              applicationId,
+              appId: app.id,
+              application_id: app.application_id,
+              candidate_id: app.candidate_id,
+              name,
+              email
+            });
+
             candidateAccumulator.push({
-              applicationId: app.id,
-              candidateId: candidateInfo?.id || app.candidate_id,
-              name: name || `Candidate #${app.id}`,
+              applicationId: applicationId, // Utiliser l'ID de l'application explicitement
+              candidateId: app.candidate_id || candidateInfo?.id,
+              name: name || `Candidate #${applicationId}`,
               email,
               appliedOffer: offer.title,
               appliedDate: formatDateTime(app.date_application),
               status: app.status || 'pending',
-              resume: candidateInfo?.cv || app.cv
+              resume: app.cv || candidateInfo?.cv
             });
           });
         } catch (error) {
@@ -415,15 +433,21 @@ const RecruiterDashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
   };
 
   const handleViewApplicationDetails = async (applicationId: number) => {
+    console.log('🔍 Frontend: handleViewApplicationDetails called with applicationId:', applicationId);
     setShowApplicationDetailsModal(true);
     setIsLoadingApplicationDetails(true);
     setApplicationDetails(null);
     setApplicationDetailsError(null);
     try {
+      console.log('📤 Frontend: Calling apiService.getApplicationDetails with:', applicationId);
       const details = await apiService.getApplicationDetails(applicationId);
+      console.log('✅ Frontend: Application details received:', details);
+      console.log('📋 Frontend: Details keys:', Object.keys(details || {}));
       setApplicationDetails(details);
     } catch (error: any) {
-      console.error('Error fetching application details:', error);
+      console.error('❌ Frontend: Error fetching application details:', error);
+      console.error('❌ Frontend: Error message:', error.message);
+      console.error('❌ Frontend: Error stack:', error.stack);
       setApplicationDetailsError(error.message || 'Failed to load application details');
     } finally {
       setIsLoadingApplicationDetails(false);
@@ -630,7 +654,11 @@ const RecruiterDashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
                 <div className="candidate-actions">
                   <button
                     className="btn-secondary"
-                    onClick={() => handleViewApplicationDetails(candidate.applicationId)}
+                    onClick={() => {
+                      console.log('🔍 Frontend: View Application clicked for candidate:', candidate);
+                      console.log('🔍 Frontend: Application ID to send:', candidate.applicationId, 'Type:', typeof candidate.applicationId);
+                      handleViewApplicationDetails(candidate.applicationId);
+                    }}
                   >
                     View Application
                   </button>
@@ -751,6 +779,7 @@ const RecruiterDashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
           <div className="embedded-section">
             <EmployerProfile
               user={user}
+              onLogout={onLogout}
               embedded
               onBack={() => setActiveTab('Overview')}
               onEditProfile={() => setActiveTab('Settings')}
@@ -761,7 +790,6 @@ const RecruiterDashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
         return (
           <Settings
             user={user}
-            onAfterSave={() => setActiveTab('Employers_Profile')}
           />
         );
       case 'Find_Candidate':
@@ -790,7 +818,7 @@ const RecruiterDashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
       case 'Plans_Billing':
         return (
           <div className="embedded-section">
-            <SubscriptionPlans user={user} onLogout={onLogout} />
+            <SubscriptionPlans user={user} />
           </div>
         );
       case 'All_Companies':
@@ -875,21 +903,88 @@ const RecruiterDashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
             {isLoadingApplicationDetails ? (
               <div className="loading-state">Loading application...</div>
             ) : applicationDetailsError ? (
-              <div className="error-state">{applicationDetailsError}</div>
+              <div className="error-state">
+                <p style={{ color: '#ef4444', marginBottom: '10px' }}>❌ {applicationDetailsError}</p>
+                <p style={{ fontSize: '14px', color: '#666' }}>
+                  Vérifiez que la candidature existe et appartient à l'une de vos offres.
+                </p>
+                <button 
+                  className="btn-secondary" 
+                  onClick={() => {
+                    setShowApplicationDetailsModal(false);
+                    setApplicationDetailsError(null);
+                  }}
+                  style={{ marginTop: '15px' }}
+                >
+                  Fermer
+                </button>
+              </div>
             ) : applicationDetails ? (
               <div className="application-details-modal">
                 <div className="detail-block">
                   <h3>Candidate Information</h3>
                   <p><strong>Name:</strong> {applicationDetails.candidate_first_name} {applicationDetails.candidate_last_name}</p>
                   <p><strong>Email:</strong> {applicationDetails.candidate_email}</p>
-                  {applicationDetails.cv && (
-                    <p><strong>CV:</strong> {applicationDetails.cv}</p>
+                  {applicationDetails.phone && (
+                    <p><strong>Phone:</strong> {applicationDetails.phone}</p>
                   )}
+                  {applicationDetails.address && (
+                    <p><strong>Address:</strong> {applicationDetails.address}</p>
+                  )}
+                  {applicationDetails.portfolio_url && (
+                    <p><strong>Portfolio:</strong> <a href={applicationDetails.portfolio_url} target="_blank" rel="noopener noreferrer">{applicationDetails.portfolio_url}</a></p>
+                  )}
+                  <div style={{ marginTop: '10px' }}>
+                    <p><strong>CV:</strong></p>
+                    {applicationDetails.cv_file ? (
+                      <div>
+                        <a 
+                          href={applicationDetails.cv_file} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          download={`CV_${applicationDetails.candidate_first_name}_${applicationDetails.candidate_last_name}_Application_${applicationDetails.id}.pdf`}
+                          style={{ 
+                            display: 'inline-block',
+                            padding: '8px 16px',
+                            background: '#2196F3',
+                            color: 'white',
+                            textDecoration: 'none',
+                            borderRadius: '4px',
+                            fontSize: '14px',
+                            fontWeight: '500',
+                            marginTop: '5px'
+                          }}
+                        >
+                          📄 Télécharger le CV de la candidature
+                        </a>
+                        <p style={{ fontSize: '12px', color: '#666', marginTop: '5px', marginBottom: 0 }}>
+                          (CV spécifique à cette candidature)
+                        </p>
+                      </div>
+                    ) : applicationDetails.cv ? (
+                      <div>
+                        <p style={{ margin: '5px 0', color: '#666' }}>{applicationDetails.cv}</p>
+                        <p style={{ fontSize: '12px', color: '#666', marginTop: '5px', marginBottom: 0 }}>
+                          (CV du profil candidat)
+                        </p>
+                      </div>
+                    ) : (
+                      <p style={{ margin: '5px 0', color: '#999', fontStyle: 'italic' }}>Aucun CV disponible</p>
+                    )}
+                  </div>
                 </div>
                 <div className="detail-block">
                   <h3>Application</h3>
                   <p><strong>Status:</strong> {applicationDetails.status}</p>
                   <p><strong>Applied on:</strong> {formatDateTime(applicationDetails.date_application)}</p>
+                  {applicationDetails.cover_letter && (
+                    <div style={{ marginTop: '15px' }}>
+                      <p><strong>Cover Letter:</strong></p>
+                      <p style={{ whiteSpace: 'pre-wrap', background: '#f5f5f5', padding: '10px', borderRadius: '4px', marginTop: '5px' }}>
+                        {applicationDetails.cover_letter}
+                      </p>
+                    </div>
+                  )}
                 </div>
                 <div className="detail-block">
                   <h3>Job Offer</h3>

@@ -80,6 +80,11 @@ CREATE TABLE IF NOT EXISTS applications (
     offer_id INT NOT NULL,
     status ENUM('pending', 'reviewed', 'accepted', 'rejected') DEFAULT 'pending',
     date_application TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    phone VARCHAR(20) NULL,
+    address TEXT NULL,
+    portfolio_url VARCHAR(500) NULL,
+    cover_letter TEXT NULL,
+    cv_file LONGTEXT NULL,
     FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE,
     FOREIGN KEY (offer_id) REFERENCES offers(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

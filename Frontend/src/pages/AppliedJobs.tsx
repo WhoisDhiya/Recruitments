@@ -40,8 +40,6 @@ const AppliedJobs: React.FC<AppliedJobsProps> = ({ user, onLogout }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('Applied_Jobs');
-  const [selectedApplication, setSelectedApplication] = useState<ApplicationWithOffer | null>(null);
-  const [showApplicationModal, setShowApplicationModal] = useState(false);
 
   // Navigation items for the top navigation bar
   const navigationItems: NavigationItem[] = [
@@ -438,10 +436,7 @@ const AppliedJobs: React.FC<AppliedJobsProps> = ({ user, onLogout }) => {
                       <div style={{ display: 'flex', gap: '10px' }}>
                         <button 
                           className="view-details-btn"
-                          onClick={() => {
-                            setSelectedApplication(application);
-                            setShowApplicationModal(true);
-                          }}
+                          onClick={() => navigate(`/application-details/${application.id}`)}
                           style={{
                             padding: '8px 16px',
                             background: '#2196F3',
@@ -478,122 +473,6 @@ const AppliedJobs: React.FC<AppliedJobsProps> = ({ user, onLogout }) => {
         </main>
       </div>
 
-      {/* Modal détail de candidature pour le candidat */}
-      {showApplicationModal && selectedApplication && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000
-          }}
-          onClick={() => setShowApplicationModal(false)}
-        >
-          <div
-            style={{
-              background: '#ffffff',
-              borderRadius: '8px',
-              padding: '24px',
-              maxWidth: '600px',
-              width: '90%',
-              maxHeight: '90vh',
-              overflowY: 'auto',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 style={{ fontSize: '20px', fontWeight: 600, marginBottom: '16px' }}>Détail de la candidature</h2>
-
-            <div style={{ marginBottom: '16px' }}>
-              <h3 style={{ margin: '0 0 4px 0', fontSize: '18px', fontWeight: 600 }}>{selectedApplication.offer.title}</h3>
-              <p style={{ margin: 0, color: '#555', fontSize: '14px' }}>
-                {selectedApplication.offer.company_name || 'Entreprise non spécifiée'} •{' '}
-                {selectedApplication.offer.location || 'Lieu non spécifié'}
-              </p>
-            </div>
-
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginBottom: '16px', fontSize: '14px' }}>
-              <span>
-                <strong>Statut :</strong>{' '}
-                {selectedApplication.status === 'pending'
-                  ? 'En attente'
-                  : selectedApplication.status === 'accepted'
-                  ? 'Accepté'
-                  : selectedApplication.status === 'rejected'
-                  ? 'Refusé'
-                  : selectedApplication.status === 'interview'
-                  ? 'Entretien'
-                  : selectedApplication.status}
-              </span>
-              <span>
-                <strong>Postulé le :</strong>{' '}
-                {formatDate(selectedApplication.applied_at || new Date().toISOString())}
-              </span>
-              <span>
-                <strong>Type de contrat :</strong>{' '}
-                {selectedApplication.offer.employment_type ||
-                  selectedApplication.offer.job_type ||
-                  'Non spécifié'}
-              </span>
-            </div>
-
-            <div style={{ marginBottom: '16px', fontSize: '14px', color: '#555' }}>
-              <strong>Salaire :</strong>{' '}
-              {getSalaryRange(selectedApplication.offer as any)}
-            </div>
-
-            {selectedApplication.offer.description && (
-              <div style={{ marginBottom: '16px', fontSize: '14px', color: '#555' }}>
-                <strong>Description de l'offre :</strong>
-                <p style={{ marginTop: '4px', whiteSpace: 'pre-line' }}>
-                  {selectedApplication.offer.description.length > 400
-                    ? `${selectedApplication.offer.description.substring(0, 400)}...`
-                    : selectedApplication.offer.description}
-                </p>
-              </div>
-            )}
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
-              <button
-                onClick={() => setShowApplicationModal(false)}
-                style={{
-                  padding: '8px 16px',
-                  background: '#e0e0e0',
-                  color: '#333',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '14px'
-                }}
-              >
-                Fermer
-              </button>
-              <button
-                onClick={() => {
-                  setShowApplicationModal(false);
-                  if (selectedApplication.offer_id) {
-                    navigate(`/job-details/${selectedApplication.offer_id}?from=applied-jobs&status=${selectedApplication.status || 'pending'}`);
-                  }
-                }}
-                style={{
-                  padding: '8px 16px',
-                  background: '#2196F3',
-                  color: '#ffffff',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '14px'
-                }}
-              >
-                Voir l'offre complète
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

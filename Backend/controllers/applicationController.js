@@ -3,11 +3,19 @@ const Notification = require("../models/Notification");
 
 const createApplication = async (req, res) => {
     try {
-        const { offer_id } = req.body;
+        console.log("📥 Backend: Raw request body:", JSON.stringify(req.body, null, 2));
+        const { offer_id, phone, address, portfolio_url, cover_letter, cv_file } = req.body;
 
         if (!offer_id) {
             return res.status(400).json({ message: "offer_id obligatoire" });
         }
+        console.log("📥 Backend: Extracted data:", { 
+            offer_id, 
+            phone: phone || 'NULL/EMPTY', 
+            address: address || 'NULL/EMPTY', 
+            portfolio_url: portfolio_url || 'NULL/EMPTY', 
+            cover_letter: cover_letter ? cover_letter.substring(0, 50) + '...' : 'NULL/EMPTY' 
+        });
         console.log("USER AUTH :", req.user);
 
         const userId = req.user.user_id; // ID de la table users
@@ -25,11 +33,61 @@ const createApplication = async (req, res) => {
 
         const candidateId = rows[0].id;
 
-        // Créer la candidature
+        // Normaliser les valeurs : convertir les chaînes vides en null
+        // Vérifier d'abord si les valeurs existent et ne sont pas undefined
+        // S'assurer que les valeurs sont bien des chaînes avant de les trimmer
+        const normalizedPhone = (phone !== undefined && phone !== null && String(phone).trim() !== '') ? String(phone).trim() : null;
+        const normalizedAddress = (address !== undefined && address !== null && String(address).trim() !== '') ? String(address).trim() : null;
+        const normalizedPortfolio = (portfolio_url !== undefined && portfolio_url !== null && String(portfolio_url).trim() !== '') ? String(portfolio_url).trim() : null;
+        const normalizedCoverLetter = (cover_letter !== undefined && cover_letter !== null && String(cover_letter).trim() !== '') ? String(cover_letter).trim() : null;
+        // Le CV est envoyé en base64 (data URI format: "data:application/pdf;base64,...")
+        const normalizedCvFile = (cv_file !== undefined && cv_file !== null && String(cv_file).trim() !== '') ? String(cv_file).trim() : null;
+
+        console.log("💾 Backend: Saving application with normalized data:", {
+            candidateId,
+            offer_id,
+            phone: normalizedPhone,
+            address: normalizedAddress,
+            portfolio_url: normalizedPortfolio,
+            cover_letter: normalizedCoverLetter ? normalizedCoverLetter.substring(0, 50) + '...' : null
+        });
+        console.log("🔍 Backend: Data types check:", {
+            phone_type: typeof phone,
+            address_type: typeof address,
+            portfolio_type: typeof portfolio_url,
+            cover_letter_type: typeof cover_letter
+        });
+
+        // Créer la candidature avec tous les champs
+        console.log("🔍 Backend: About to INSERT with values:", {
+            candidateId,
+            offer_id,
+            phone: normalizedPhone,
+            address: normalizedAddress,
+            portfolio_url: normalizedPortfolio,
+            cover_letter: normalizedCoverLetter ? normalizedCoverLetter.substring(0, 30) + '...' : null
+        });
+        
         const [insertResult] = await db.query(
-            "INSERT INTO applications (candidate_id, offer_id) VALUES (?, ?)",
-            [candidateId, offer_id]
+            "INSERT INTO applications (candidate_id, offer_id, phone, address, portfolio_url, cover_letter, cv_file) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [candidateId, offer_id, normalizedPhone, normalizedAddress, normalizedPortfolio, normalizedCoverLetter, normalizedCvFile]
         );
+
+        console.log("✅ Backend: Application created with ID:", insertResult.insertId);
+        console.log("✅ Backend: Insert result:", JSON.stringify(insertResult, null, 2));
+        
+        // Vérifier que les données ont bien été sauvegardées
+        const [verifyRows] = await db.query(
+            "SELECT id, candidate_id, offer_id, phone, address, portfolio_url, cover_letter FROM applications WHERE id = ?",
+            [insertResult.insertId]
+        );
+        console.log("🔍 Backend: Verification - Saved data from DB:", JSON.stringify(verifyRows[0], null, 2));
+        
+        if (!verifyRows[0]) {
+            console.error("❌ Backend: ERROR - Application was not found after insertion!");
+        } else {
+            console.log("✅ Backend: Data verification successful!");
+        }
 
         // Récupérer le user_id et email du recruteur propriétaire de l'offre
         const [ownerRows] = await db.query(
@@ -67,51 +125,181 @@ const createApplication = async (req, res) => {
 
 const getApplicationById = async (req, res) => {
     try {
+        // Vérifier que l'utilisateur est authentifié
+        if (!req.user || !req.user.user_id) {
+            console.error('❌ Backend: User not authenticated');
+            return res.status(401).json({ status: "ERROR", message: "Non authentifié" });
+        }
+        
         const applicationId = req.params.id;
-
         const userId = req.user.user_id;
+        
+        console.log('🔍 Backend: getApplicationById called with applicationId:', applicationId, 'userId:', userId);
 
-        // Trouver l’ID du candidat (table candidates)
+        // Trouver l'ID du candidat (table candidates)
         const [candidateRows] = await db.query(
             "SELECT id FROM candidates WHERE user_id = ?",
             [userId]
         );
 
         if (candidateRows.length === 0) {
-            return res.status(400).json({ message: "Ce user n'est pas un candidat" });
+            return res.status(400).json({ status: "ERROR", message: "Ce user n'est pas un candidat" });
         }
 
         const candidateId = candidateRows[0].id;
+        console.log('✅ Backend: Candidate ID found:', candidateId);
 
-        // Chercher la candidature
+        // Chercher la candidature avec tous les détails
+        // Récupérer directement les valeurs de la table applications (phone, address, etc.)
+        console.log('🔍 Backend: Executing SQL query for application:', applicationId);
         const [rows] = await db.query(
-            `SELECT a.id, a.status, a.date_application, o.title AS offer_title
+            `SELECT 
+                a.id,
+                a.status,
+                a.date_application,
+                a.phone,
+                a.address,
+                a.portfolio_url,
+                a.cover_letter,
+                a.cv_file,
+                a.offer_id,
+                o.title AS offer_title,
+                req.description AS offer_description,
+                rec.company_address AS offer_location,
+                req.minSalary AS salary_min,
+                req.maxSalary AS salary_max,
+                req.salaryType AS salary_type,
+                req.jobType,
+                req.jobLevel,
+                rec.company_name,
+                c.cv,
+                c.image,
+                u.first_name,
+                u.last_name,
+                u.email
              FROM applications a
              JOIN offers o ON o.id = a.offer_id
-             WHERE a.id = ? AND a.candidate_id = ?`,
+             JOIN recruiters rec ON rec.id = o.recruiter_id
+             LEFT JOIN requirements req ON req.offer_id = o.id
+             JOIN candidates c ON c.id = a.candidate_id
+             JOIN users u ON u.id = c.user_id
+             WHERE a.id = ? AND a.candidate_id = ?
+             LIMIT 1`,
             [applicationId, candidateId]
         );
+        
+        console.log('✅ Backend: SQL query executed successfully, rows found:', rows.length);
 
         if (rows.length === 0) {
-            return res.status(404).json({ message: "Candidature introuvable" });
+            console.log(`❌ Backend: Application ${applicationId} not found for candidate ${candidateId}`);
+            return res.status(404).json({ status: "ERROR", message: "Candidature introuvable" });
         }
 
-        return res.json(rows[0]);
+        console.log(`✅ Backend: Application ${applicationId} found, returning data`);
+        console.log('Backend: rows[0] keys:', Object.keys(rows[0]));
+        console.log('Backend: rows[0] full data:', JSON.stringify(rows[0], null, 2));
+        console.log('Backend: phone value:', rows[0].phone, 'type:', typeof rows[0].phone, 'exists:', 'phone' in rows[0]);
+        console.log('Backend: address value:', rows[0].address, 'type:', typeof rows[0].address, 'exists:', 'address' in rows[0]);
+        console.log('Backend: portfolio_url value:', rows[0].portfolio_url, 'type:', typeof rows[0].portfolio_url, 'exists:', 'portfolio_url' in rows[0]);
+        console.log('Backend: cover_letter value:', rows[0].cover_letter ? rows[0].cover_letter.substring(0, 50) + '...' : 'NULL', 'type:', typeof rows[0].cover_letter, 'exists:', 'cover_letter' in rows[0]);
+        console.log('Backend: email value:', rows[0].email, 'type:', typeof rows[0].email, 'exists:', 'email' in rows[0]);
+        console.log('Backend: cv value:', rows[0].cv, 'type:', typeof rows[0].cv, 'exists:', 'cv' in rows[0]);
+
+        // Construire l'objet de réponse avec toutes les données
+        // Gérer correctement les valeurs NULL et les chaînes vides
+        const row = rows[0];
+        
+        // Fonction helper pour convertir en nombre de manière sécurisée
+        const safeParseFloat = (value) => {
+            if (value === null || value === undefined || value === '') return null;
+            const parsed = parseFloat(value);
+            return isNaN(parsed) ? null : parsed;
+        };
+        
+        // Fonction helper pour convertir en string de manière sécurisée
+        const safeString = (value) => {
+            if (value === null || value === undefined) return null;
+            const str = String(value);
+            return str.trim() === '' ? null : str;
+        };
+        
+        const applicationData = {
+            id: row.id ?? null,
+            status: row.status ?? null,
+            date_application: row.date_application ?? null,
+            // Les champs de l'application - peuvent être NULL ou des chaînes vides
+            phone: safeString(row.phone),
+            address: safeString(row.address),
+            portfolio_url: safeString(row.portfolio_url),
+            cover_letter: safeString(row.cover_letter),
+            cv_file: safeString(row.cv_file),
+            // Informations sur l'offre
+            offer_id: row.offer_id ?? null,
+            offer_title: row.offer_title ?? null,
+            offer_description: safeString(row.offer_description),
+            offer_location: safeString(row.offer_location),
+            // Informations sur le salaire (peuvent être NULL si pas de requirement)
+            salary_min: safeParseFloat(row.salary_min),
+            salary_max: safeParseFloat(row.salary_max),
+            salary_type: row.salary_type ?? null,
+            jobType: row.jobType ?? null,
+            jobLevel: row.jobLevel ?? null,
+            // Informations sur l'entreprise
+            company_name: row.company_name ?? null,
+            // Informations sur le candidat
+            cv: safeString(row.cv),
+            image: safeString(row.image),
+            first_name: row.first_name ?? null,
+            last_name: row.last_name ?? null,
+            email: row.email ?? null
+        };
+
+        const responseData = {
+            status: "SUCCESS",
+            data: applicationData
+        };
+
+        console.log('Backend: Response structure:', JSON.stringify(responseData, null, 2));
+
+        return res.status(200).json(responseData);
 
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ status: "ERROR", message: "Erreur serveur", error: err.message });
+        console.error('❌ Error in getApplicationById:', err);
+        console.error('Error stack:', err.stack);
+        console.error('Error message:', err.message);
+        res.status(500).json({ 
+            status: "ERROR", 
+            message: "Erreur serveur", 
+            error: err.message,
+            details: process.env.NODE_ENV === 'development' ? err.stack : undefined
+        });
     }
 };
 
 // Récupérer les détails d'une candidature (côté recruteur)
 const getApplicationDetailsForRecruiter = async (req, res) => {
     try {
-        const applicationId = req.params.id;
+        // Convertir l'ID en nombre (les paramètres d'URL sont des strings)
+        const applicationId = parseInt(req.params.id, 10);
         const userRole = req.user.role;
         const userId = req.user.user_id;
 
+        console.log('🔍 Backend: getApplicationDetailsForRecruiter called', {
+            applicationId,
+            applicationIdType: typeof applicationId,
+            rawParam: req.params.id,
+            userRole,
+            userId
+        });
+
+        // Vérifier que l'ID est valide
+        if (isNaN(applicationId) || applicationId <= 0) {
+            console.error('❌ Backend: Invalid application ID:', req.params.id);
+            return res.status(400).json({ status: "ERROR", message: "ID de candidature invalide" });
+        }
+
         if (userRole !== "recruiter") {
+            console.error('❌ Backend: User is not a recruiter');
             return res.status(403).json({ status: "ERROR", message: "Accès refusé : réservé aux recruteurs" });
         }
 
@@ -121,42 +309,105 @@ const getApplicationDetailsForRecruiter = async (req, res) => {
         );
 
         if (recruiterRows.length === 0) {
+            console.error('❌ Backend: Recruiter not found for user_id:', userId);
             return res.status(400).json({ status: "ERROR", message: "Ce user n'est pas un recruteur" });
         }
 
         const recruiterId = recruiterRows[0].id;
+        console.log('✅ Backend: Recruiter ID found:', recruiterId);
+        console.log('🔍 Backend: Searching for application:', applicationId, 'for recruiter:', recruiterId);
+
+        // D'abord, vérifier si l'application existe
+        const [appCheck] = await db.query(
+            "SELECT id, offer_id, candidate_id FROM applications WHERE id = ?",
+            [applicationId]
+        );
+
+        if (appCheck.length === 0) {
+            console.error('❌ Backend: Application not found:', applicationId);
+            return res.status(404).json({ status: "ERROR", message: "Candidature introuvable" });
+        }
+
+        console.log('✅ Backend: Application found:', appCheck[0]);
+
+        // Vérifier si l'offre appartient au recruteur
+        const [offerCheck] = await db.query(
+            "SELECT id, recruiter_id FROM offers WHERE id = ?",
+            [appCheck[0].offer_id]
+        );
+
+        if (offerCheck.length === 0) {
+            console.error('❌ Backend: Offer not found:', appCheck[0].offer_id);
+            return res.status(404).json({ status: "ERROR", message: "Offre introuvable" });
+        }
+
+        if (offerCheck[0].recruiter_id !== recruiterId) {
+            console.error('❌ Backend: Offer does not belong to recruiter. Offer recruiter_id:', offerCheck[0].recruiter_id, 'Current recruiter_id:', recruiterId);
+            return res.status(403).json({ status: "ERROR", message: "Cette candidature n'appartient pas à vos offres" });
+        }
+
+        console.log('✅ Backend: Offer belongs to recruiter, fetching full details...');
+        console.log('🔍 Backend: Executing final query with applicationId:', applicationId, 'recruiterId:', recruiterId);
 
         const [rows] = await db.query(`
             SELECT 
                 a.id,
                 a.status,
                 a.date_application,
-                a.created_at,
+                a.phone,
+                a.address,
+                a.portfolio_url,
+                a.cover_letter,
+                a.cv_file,
                 o.id AS offer_id,
                 o.title AS offer_title,
-                o.description AS offer_description,
-                o.location AS offer_location,
-                o.salary_min,
-                o.salary_max,
-                o.salary_type,
+                req.description AS offer_description,
+                r.company_address AS offer_location,
+                req.minSalary AS salary_min,
+                req.maxSalary AS salary_max,
+                req.salaryType AS salary_type,
+                req.jobType,
+                req.jobLevel,
                 c.id AS candidate_id,
                 c.cv,
                 c.image,
                 u.first_name AS candidate_first_name,
                 u.last_name AS candidate_last_name,
-                u.email AS candidate_email
+                u.email AS candidate_email,
+                r.company_name
             FROM applications a
             JOIN offers o ON o.id = a.offer_id
             JOIN recruiters r ON r.id = o.recruiter_id
+            LEFT JOIN requirements req ON req.offer_id = o.id
             JOIN candidates c ON c.id = a.candidate_id
             JOIN users u ON u.id = c.user_id
             WHERE a.id = ? AND r.id = ?
             LIMIT 1
         `, [applicationId, recruiterId]);
 
+        console.log('🔍 Backend: Query result, rows found:', rows.length);
+        if (rows.length > 0) {
+            console.log('✅ Backend: Query successful, application data keys:', Object.keys(rows[0]));
+        } else {
+            console.error('❌ Backend: Query returned no rows. Checking why...');
+            // Vérification supplémentaire pour déboguer
+            const [debugCheck] = await db.query(`
+                SELECT a.id, a.offer_id, o.recruiter_id, r.id AS recruiter_table_id
+                FROM applications a
+                JOIN offers o ON o.id = a.offer_id
+                JOIN recruiters r ON r.id = o.recruiter_id
+                WHERE a.id = ?
+            `, [applicationId]);
+            console.log('🔍 Backend: Debug check result:', debugCheck);
+        }
+
         if (rows.length === 0) {
+            console.error('❌ Backend: No rows returned from query');
             return res.status(404).json({ status: "ERROR", message: "Candidature introuvable pour ce recruteur" });
         }
+
+        console.log('✅ Backend: Application details retrieved successfully');
+        console.log('📋 Backend: Application data keys:', Object.keys(rows[0]));
 
         return res.status(200).json({
             status: "SUCCESS",

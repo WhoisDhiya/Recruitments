@@ -61,14 +61,58 @@ class Offer {
     // Récupérer les candidatures d'une offre
     static async getApplications(offer_id) {
         const [rows] = await db.query(`
-            SELECT a.*, c.*, u.last_name, u.first_name, u.email 
+            SELECT 
+                a.id AS application_id,
+                a.candidate_id,
+                a.offer_id,
+                a.status,
+                a.date_application,
+                a.phone,
+                a.address,
+                a.portfolio_url,
+                a.cover_letter,
+                a.cv_file,
+                c.id AS candidate_id_table,
+                c.cv,
+                c.image,
+                c.user_id AS candidate_user_id,
+                u.id AS user_id,
+                u.first_name,
+                u.last_name,
+                u.email,
+                u.role
             FROM applications a 
             JOIN candidates c ON a.candidate_id = c.id 
             JOIN users u ON c.user_id = u.id 
             WHERE a.offer_id = ? 
             ORDER BY a.date_application DESC
         `, [offer_id]);
-        return rows;
+        
+        // Normaliser les résultats pour éviter les conflits de colonnes
+        return rows.map(row => ({
+            id: row.application_id, // ID de l'application (le plus important)
+            application_id: row.application_id,
+            candidate_id: row.candidate_id,
+            offer_id: row.offer_id,
+            status: row.status,
+            date_application: row.date_application,
+            phone: row.phone,
+            address: row.address,
+            portfolio_url: row.portfolio_url,
+            cover_letter: row.cover_letter,
+            cv_file: row.cv_file,
+            candidate: {
+                id: row.candidate_id_table,
+                cv: row.cv,
+                image: row.image,
+                user_id: row.candidate_user_id
+            },
+            candidate_first_name: row.first_name,
+            candidate_last_name: row.last_name,
+            candidate_email: row.email,
+            email: row.email, // Pour compatibilité
+            cv: row.cv // Pour compatibilité
+        }));
     }
 }
 

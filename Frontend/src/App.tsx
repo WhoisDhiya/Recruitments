@@ -21,6 +21,7 @@ import CandidateSettings from './pages/CandidateSettings.tsx';
 import CandidateNotifications from './pages/CandidateNotifications.tsx';
 import CustomerSupport from './pages/CustomerSupport.tsx';
 import AppliedJobs from './pages/AppliedJobs.tsx';
+import ApplicationDetails from './pages/ApplicationDetails.tsx';
 import SubscriptionPlans from './pages/SubscriptionPlans.tsx';
 import PaymentSuccess from './pages/PaymentSuccess.tsx';
 
@@ -182,6 +183,11 @@ function App() {
           <Route path="/applied-jobs" element={
             isAuthenticated && user?.role === 'candidate'
               ? <AppliedJobs user={user || undefined} onLogout={handleLogout} />
+              : <Navigate to="/signin" />
+          } />
+          <Route path="/application-details/:id" element={
+            isAuthenticated && user?.role === 'candidate'
+              ? <ApplicationDetails user={user || undefined} onLogout={handleLogout} />
               : <Navigate to="/signin" />
           } />
           <Route path="/notifications" element={
