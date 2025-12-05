@@ -118,6 +118,22 @@ exports.deleteRecruiter = async (req, res) => {
         const { id } = req.params;
         const recruiter = await Recruiter.findById(id);
         if (!recruiter) return res.status(404).json({ status: 'ERROR', message: 'Recruteur non trouvé' });
+        
+        // Vérifier si le recruteur a des offres avec des applications
+        const offers = await Recruiter.getOffers(id);
+        
+        // Vérifier chaque offre pour voir si elle a des applications
+        for (const offer of offers) {
+            const applications = await Offer.getApplications(offer.id);
+            if (applications.length > 0) {
+                return res.status(400).json({ 
+                    status: 'ERROR', 
+                    message: 'Impossible de supprimer ce recruteur : il possède des offres avec des candidatures actives. Veuillez d\'abord supprimer ou traiter les candidatures.' 
+                });
+            }
+        }
+        
+        // Si aucune application trouvée, procéder à la suppression
         const deleted = await Recruiter.delete(id);
         if (!deleted) return res.status(400).json({ status: 'ERROR', message: 'Suppression échouée' });
         res.json({ status: 'SUCCESS', message: 'Recruteur supprimé' });

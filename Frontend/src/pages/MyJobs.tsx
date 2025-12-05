@@ -42,7 +42,6 @@ const MyJobs: React.FC<DashboardProps> = ({ onLogout, user }) => {
     { id: 'My_Jobs', label: 'My Jobs', icon: '💼', active: true  },
     { id: 'Saved_Candidate', label: 'Saved Candidate', icon: '⭐' },
     { id: 'Plans_Billing', label: 'Plans & Billing', icon: '💳' },
-    { id: 'All_Companies', label: 'All Companies', icon: '🏢' },
     { id: 'Settings', label: 'Settings', icon: '⚙️' }
   ];
 
@@ -181,6 +180,19 @@ const MyJobs: React.FC<DashboardProps> = ({ onLogout, user }) => {
   
     const handleUpdateJob = async () => {
       if (!editingJob) return;
+  
+      // Validation: la date d'expiration ne peut pas être avant aujourd'hui
+      if (editFormData.date_expiration) {
+        const expirationDate = new Date(editFormData.date_expiration);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        expirationDate.setHours(0, 0, 0, 0);
+        
+        if (expirationDate < today) {
+          alert('La date d\'expiration ne peut pas être antérieure à aujourd\'hui.');
+          return;
+        }
+      }
   
       try {
         await apiService.updateOffer(editingJob.id, {
@@ -492,10 +504,12 @@ const MyJobs: React.FC<DashboardProps> = ({ onLogout, user }) => {
                         <label>Expiration Date</label>
                         <input
                         type="date"
+                        min={new Date().toISOString().split('T')[0]}
                         value={editFormData.date_expiration || ''}
                         onChange={(e) => setEditFormData({ ...editFormData, date_expiration: e.target.value })}
                         className="form-input"
                         />
+                        <small className="text-gray-500" style={{ display: 'block', marginTop: '4px', fontSize: '12px' }}>La date d'expiration doit être supérieure ou égale à aujourd'hui</small>
                     </div>
                     </div>
 

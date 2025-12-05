@@ -56,10 +56,13 @@ class RecruiterSubscription {
     }
 
     // Vérifier si un recruteur a déjà une souscription active
+    // ✅ Utilise NOW() pour vérifier la date côté serveur SQL (ne peut pas être manipulé)
     static async checkActive(recruiter_id) {
         const [rows] = await db.query(
             `SELECT * FROM recruiter_subscriptions 
-             WHERE recruiter_id = ? AND status = 'active' 
+             WHERE recruiter_id = ? 
+             AND status = 'active' 
+             AND end_date >= CURDATE()
              ORDER BY end_date DESC LIMIT 1`,
             [recruiter_id]
         );

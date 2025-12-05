@@ -145,7 +145,7 @@ exports.getCandidateDetailsForRecruiter = async (req, res) => {
             SELECT p.candidate_limit 
             FROM recruiter_subscriptions s
             JOIN packs p ON s.pack_id = p.id
-            WHERE s.recruiter_id = ? AND s.status = 'active' AND s.end_date > NOW()
+            WHERE s.recruiter_id = ? AND s.status = 'active' AND s.end_date >= CURDATE()
             LIMIT 1
         `;
         const [subscription] = await db.query(checkSubQuery, [recruiterId]);

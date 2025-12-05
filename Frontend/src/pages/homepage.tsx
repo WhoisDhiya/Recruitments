@@ -78,7 +78,7 @@ const Header: React.FC<{ user?: User; isAuthenticated: boolean; onLogout?: () =>
 };
 
 // Composant pour l'accueil
-const Homepage: React.FC<{ user?: User; isAuthenticated: boolean; onLogout?: () => void }> = ({ user, isAuthenticated, onLogout }) => {
+const Homepage: React.FC<{ user?: User; isAuthenticated: boolean; onLogout?: () => void; hideHeader?: boolean }> = ({ user, isAuthenticated, onLogout, hideHeader = false }) => {
   const navigate = useNavigate();
   const [featuredJobs, setFeaturedJobs] = useState<Offer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -121,7 +121,7 @@ const Homepage: React.FC<{ user?: User; isAuthenticated: boolean; onLogout?: () 
 
   return (
     <div className="min-h-screen bg-white">
-      <Header user={user} isAuthenticated={isAuthenticated} onLogout={onLogout} />
+      {!hideHeader && <Header user={user} isAuthenticated={isAuthenticated} onLogout={onLogout} />}
 
       <main>
         {/* Hero Section */}

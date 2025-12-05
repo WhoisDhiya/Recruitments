@@ -33,6 +33,29 @@ const createApplication = async (req, res) => {
 
         const candidateId = rows[0].id;
 
+        // Validation du numéro de téléphone si fourni
+        if (phone !== undefined && phone !== null && String(phone).trim() !== '') {
+            const phoneStr = String(phone).trim();
+            // Supprimer les espaces, tirets, parenthèses et points pour la validation
+            const cleanedPhone = phoneStr.replace(/[\s\-\(\)\.]/g, '');
+            const digitsOnly = cleanedPhone.replace(/\D/g, '');
+            
+            // Vérifier que le numéro contient entre 8 et 15 chiffres
+            if (digitsOnly.length < 8 || digitsOnly.length > 15) {
+                return res.status(400).json({ 
+                    message: "Format de numéro de téléphone invalide. Le numéro doit contenir entre 8 et 15 chiffres (ex: +216 23 235 891 ou 0123456789)" 
+                });
+            }
+            
+            // Vérifier le format général (accepte les formats internationaux et locaux)
+            const phoneRegex = /^(\+?\d{1,4}[\s\-]?)?(\(?\d{1,4}\)?[\s\-]?)?[\d\s\-]{8,15}$/;
+            if (!phoneRegex.test(phoneStr)) {
+                return res.status(400).json({ 
+                    message: "Format de numéro de téléphone invalide. Veuillez entrer un numéro valide (ex: +216 23 235 891 ou 0123456789)" 
+                });
+            }
+        }
+
         // Normaliser les valeurs : convertir les chaînes vides en null
         // Vérifier d'abord si les valeurs existent et ne sont pas undefined
         // S'assurer que les valeurs sont bien des chaînes avant de les trimmer

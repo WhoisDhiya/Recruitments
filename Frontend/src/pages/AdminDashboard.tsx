@@ -2,15 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, 
   Users, 
-  Settings as SettingsIcon, 
   LogOut,
-  UserPlus,
   
   Briefcase, // Icon for Applications
   UserRoundCog, // Icon for Recruiters
   UserRoundSearch // Icon for Candidates
 } from 'lucide-react';
-import SettingsPage from './Settings';
 import { apiService } from '../services/api';
 import type {
   User as UserType,
@@ -27,7 +24,6 @@ interface AdminDashboardProps {
 // Removed local Activity interface as it's now imported
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
-  
   const [activeMenu, setActiveMenu] = useState('Dashboard');
   const [users, setUsers] = useState<UserType[]>([]);
   const [candidates, setCandidates] = useState<CandidateType[]>([]);
@@ -37,15 +33,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // State for Add User Modal
-  const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
-  const [newUser, setNewUser] = useState({
-    first_name: '',
-    last_name: '',
-    email: '',
-    password: '',
-    role: 'candidate', // Default role
-  });
 
 
   useEffect(() => {
@@ -57,14 +44,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         switch (activeMenu) {
           case 'Users':
             data = await apiService.getUsers();
-            // Ensure data conforms to UserType structure
-            setUsers(data.map((user: UserType) => ({ 
-              ...user,
-              name: `${user.first_name} ${user.last_name}`,
-              avatar: user.first_name.substring(0,1).toUpperCase() + user.last_name.substring(0,1).toUpperCase(),
-              status: user.status || 'Active',
-              lastActive: user.updated_at ? new Date(user.updated_at).toLocaleDateString() : 'N/A',
-            })));
+            // Filter out admin users and ensure data conforms to UserType structure
+            setUsers(data
+              .filter((user: UserType) => user.role !== 'admin')
+              .map((user: UserType) => ({ 
+                ...user,
+                name: `${user.first_name} ${user.last_name}`,
+                avatar: user.first_name.substring(0,1).toUpperCase() + user.last_name.substring(0,1).toUpperCase(),
+                status: user.status || 'Active',
+                lastActive: user.updated_at ? new Date(user.updated_at).toLocaleDateString() : 'N/A',
+              })));
             break;
           case 'Candidates':
             data = await apiService.getAdminCandidates();
@@ -127,6 +116,33 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     }
   }, [activeMenu]);
 
+  // Vérifier que l'utilisateur existe toujours au chargement
+  useEffect(() => {
+    const verifyUser = async () => {
+      try {
+        const verification = await apiService.verifyUser();
+        if (!verification.valid) {
+          console.log('❌ Admin user no longer exists, redirecting to signin');
+          if (onLogout) {
+            onLogout();
+          }
+          window.location.href = '/signin';
+        }
+      } catch (error) {
+        console.error('Error verifying admin user:', error);
+        // Si erreur de vérification, déconnecter
+        if (error instanceof Error && (error.message.includes('supprimé') || error.message.includes('401'))) {
+          if (onLogout) {
+            onLogout();
+          }
+          window.location.href = '/signin';
+        }
+      }
+    };
+    
+    verifyUser();
+  }, [onLogout]);
+
   const getRoleColor = (role: string) => {
     switch (role) {
       case 'admin':
@@ -172,52 +188,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     }
   };
 
-  const handleAddUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
-    try {
-      // Assuming apiService.signup exists and works as expected
-      // It should return the new user data or confirmation
-      const response = await apiService.signup({
-        first_name: newUser.first_name,
-        last_name: newUser.last_name,
-        email: newUser.email,
-        password: newUser.password,
-        role: newUser.role as UserType['role'],
-      });
-      
-      // Assuming the response contains the newly created user data
-      if (response.user) {
-        // Refetch users to get the most up-to-date list including the new user
-        // Or, if the API returns the full user object, add it to the state directly
-        const updatedUsers = await apiService.getUsers();
-        setUsers(updatedUsers.map((user: UserType) => ({ 
-          ...user,
-          name: `${user.first_name} ${user.last_name}`,
-          avatar: user.first_name.substring(0,1).toUpperCase() + user.last_name.substring(0,1).toUpperCase(),
-          status: user.status || 'Active',
-          lastActive: user.updated_at ? new Date(user.updated_at).toLocaleDateString() : 'N/A',
-        })));
-        alert('User added successfully!');
-        setIsAddUserModalOpen(false); // Close modal
-        setNewUser({
-          first_name: '',
-          last_name: '',
-          email: '',
-          password: '',
-          role: 'candidate',
-        });
-      }
-    } catch (err: unknown) {
-      const errorMessage = (err instanceof Error) ? err.message : 'An unknown error occurred';
-      console.error('Failed to add user:', err);
-      setError(errorMessage);
-      alert(`Error adding user: ${errorMessage}`);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleDeleteCandidate = async (candidateId: number) => {
     if (window.confirm('Are you sure you want to delete this candidate?')) {
@@ -255,23 +225,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         console.error('Failed to delete application:', err);
         alert(`Error deleting application: ${errorMessage}`);
       }
-    }
-  };
-
-  const handleUpdateUserRole = async (userId: number, currentRole: string) => {
-    const newRole = prompt(`Enter new role for user ${userId} (current: ${currentRole}). Allowed: candidate, recruiter, admin`);
-    if (newRole && ['candidate', 'recruiter', 'admin'].includes(newRole.toLowerCase())) {
-      try {
-        await apiService.updateUserRole(userId, newRole.toLowerCase());
-        setUsers(users.map(user => user.id === userId ? { ...user, role: newRole.toLowerCase() as UserType['role'] } : user));
-        alert('User role updated successfully!');
-      } catch (err: unknown) {
-        const errorMessage = (err instanceof Error) ? err.message : 'An unknown error occurred';
-        console.error('Failed to update user role:', err);
-        alert(`Error updating user role: ${errorMessage}`);
-      }
-    } else if (newRole !== null) {
-      alert('Invalid role. Please enter candidate, recruiter, or admin.');
     }
   };
 
@@ -363,20 +316,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
               <span>Applications</span>
             </button>
             
-            
-            <button
-              onClick={() => setActiveMenu('Settings')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                activeMenu === 'Settings'
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-300 hover:bg-gray-700'
-              }`}
-            >
-              <SettingsIcon className="w-5 h-5" />
-              <span>Settings</span>
-            </button>
-            
-            
           </div>
         </nav>
         
@@ -405,9 +344,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                 {activeMenu === 'Candidates' && 'Candidate Management'}
                 {activeMenu === 'Recruiters' && 'Recruiter Management'}
                 {activeMenu === 'Applications' && 'Application Management'}
-                
-                {activeMenu === 'Settings' && 'Settings'}
-                
               </h1>
               <p className="text-gray-500 mt-1">Welcome back, Administrator</p>
             </div>
@@ -417,11 +353,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         </header>
 
         {/* Dashboard Content */}
-        {activeMenu === 'Settings' ? (
-          <div className="p-8">
-            <SettingsPage />
-          </div>
-        ) : activeMenu === 'Users' ? (
+        {activeMenu === 'Users' ? (
           <div className="p-8">
             {loading && <p>Loading users...</p>}
             {error && <p className="text-red-500">Error: {error}</p>}
@@ -429,18 +361,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                 <div className="flex items-center justify-between mb-6">
                   <h2 className="text-xl font-bold text-gray-900">User Management</h2>
-                  <div className="flex items-center gap-3">
-                    
-                    
-                    {/* Add User button - functionality to be implemented or considered for future backend expansion */}
-                    <button 
-                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                      onClick={() => setIsAddUserModalOpen(true)}
-                    >
-                      <UserPlus className="w-4 h-4" />
-                      <span>+ Add User</span>
-                    </button>
-                  </div>
                 </div>
 
                 <div className="overflow-x-auto">
@@ -450,7 +370,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                         <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">User</th>
                         <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Role</th>
                         <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Status</th>
-                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Last Active</th>
                         <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Actions</th>
                       </tr>
                     </thead>
@@ -478,22 +397,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                               {user.status || 'Active'}
                             </span>
                           </td>
-                          <td className="py-4 px-4 text-sm text-gray-600">{user.updated_at ? new Date(user.updated_at).toLocaleDateString() : 'N/A'}</td>
                           <td className="py-4 px-4">
-                            <div className="flex items-center gap-4">
-                              <button 
-                                className="text-blue-600 hover:text-blue-700 font-medium text-sm"
-                                onClick={() => handleUpdateUserRole(user.id, user.role)}
-                              >
-                                Edit Role
-                              </button>
-                              <button 
-                                className="text-red-600 hover:text-red-700 font-medium text-sm"
-                                onClick={() => handleDeleteUser(user.id)}
-                              >
-                                Delete
-                              </button>
-                            </div>
+                            <button 
+                              className="text-red-600 hover:text-red-700 font-medium text-sm"
+                              onClick={() => handleDeleteUser(user.id)}
+                            >
+                              Delete
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -517,7 +427,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                         <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Candidate</th>
                         <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">User ID</th>
                         <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Status</th>
-                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Profile Views</th>
                         <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Actions</th>
                       </tr>
                     </thead>
@@ -541,9 +450,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                               {candidate.status || 'Active'}
                             </span>
                           </td>
-                          <td className="py-4 px-4 text-sm text-gray-600">{candidate.profileViews || 0}</td>
                           <td className="py-4 px-4">
-                            <button className="text-blue-600 hover:text-blue-700 font-medium text-sm mr-4">Edit</button>
                             <button 
                               className="text-red-600 hover:text-red-700 font-medium text-sm"
                               onClick={() => handleDeleteCandidate(candidate.id)}
@@ -573,7 +480,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                         <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Recruiter</th>
                         <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">User ID</th>
                         <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Company</th>
-                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Posted Offers</th>
                         <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Status</th>
                         <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Actions</th>
                       </tr>
@@ -594,14 +500,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                           </td>
                           <td className="py-4 px-4 text-sm text-gray-600">{recruiter.user_id}</td>
                           <td className="py-4 px-4 text-sm text-gray-600">{recruiter.company_name}</td>
-                          <td className="py-4 px-4 text-sm text-gray-600">{recruiter.postedOffers || 0}</td>
                           <td className="py-4 px-4">
                             <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(recruiter.status || 'Active')}`}>
                               {recruiter.status || 'Active'}
                             </span>
                           </td>
                           <td className="py-4 px-4">
-                            <button className="text-blue-600 hover:text-blue-700 font-medium text-sm mr-4">Edit</button>
                             <button 
                               className="text-red-600 hover:text-red-700 font-medium text-sm"
                               onClick={() => handleDeleteRecruiter(recruiter.id)}
@@ -739,92 +643,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                 <p>Recent activities will be displayed here once a backend API is implemented.</p>
                 <p>This could include new user registrations, new job postings, etc.</p>
               </div>
-            </div>
-          </div>
-        )}
-        {/* Add User Modal */}
-        {isAddUserModalOpen && (
-          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full" id="my-modal">
-            <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-              <h3 className="text-lg font-bold mb-4">Add New User</h3>
-              <form onSubmit={handleAddUser} className="space-y-4">
-                <div>
-                  <label htmlFor="first_name" className="block text-sm font-medium text-gray-700">First Name</label>
-                  <input
-                    type="text"
-                    id="first_name"
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    value={newUser.first_name}
-                    onChange={(e) => setNewUser({ ...newUser, first_name: e.target.value })}
-                    required
-                  />
-                </div>
-                <div>
-                  <label htmlFor="last_name" className="block text-sm font-medium text-gray-700">Last Name</label>
-                  <input
-                    type="text"
-                    id="last_name"
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    value={newUser.last_name}
-                    onChange={(e) => setNewUser({ ...newUser, last_name: e.target.value })}
-                    required
-                  />
-                </div>
-                <div>
-                  <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email</label>
-                  <input
-                    type="email"
-                    id="email"
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    value={newUser.email}
-                    onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                    required
-                  />
-                </div>
-                <div>
-                  <label htmlFor="password" className="block text-sm font-medium text-gray-700">Password</label>
-                  <input
-                    type="password"
-                    id="password"
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    value={newUser.password}
-                    onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                    required
-                  />
-                </div>
-                <div>
-                  <label htmlFor="role" className="block text-sm font-medium text-gray-700">Role</label>
-                  <select
-                    id="role"
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    value={newUser.role}
-                    onChange={(e) => setNewUser({ ...newUser, role: e.target.value as UserType['role'] })}
-                    required
-                  >
-                    <option value="recruiter">Recruiter</option> {/* Set default to Recruiter */}
-                    <option value="admin">Admin</option>
-                    {/* <option value="candidate" disabled>Candidate (requires CV/Image)</option> */}
-                  </select>
-                </div>
-                <p className="text-sm text-gray-500 mt-1">Note: Candidate users must register through the main signup form to provide CV and image.</p>
-                <div className="flex justify-end space-x-2">
-                  <button
-                    type="button"
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
-                    onClick={() => setIsAddUserModalOpen(false)}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                    disabled={loading}
-                  >
-                    {loading ? 'Adding...' : 'Add User'}
-                  </button>
-                </div>
-                {error && <p className="text-red-500 text-sm mt-2">Error: {error}</p>}
-              </form>
             </div>
           </div>
         )}

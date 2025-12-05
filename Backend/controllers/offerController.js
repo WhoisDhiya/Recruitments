@@ -18,36 +18,55 @@ exports.createOfferForRecruiter = async (req, res) => {
         // 🛑 DÉBUT DE LA VÉRIFICATION DU PACK (LE GENDARME)
         //    NOTE: Bypass possible en mode dev via la variable d'environnement
         //    `BYPASS_SUBSCRIPTION_CHECK=true` (ne pas laisser en production)
+        //    Le bypass permet l'accès sans abonnement, mais respecte quand même les limites
         // ==================================================================================
 
-        // If bypass flag set, skip subscription checks entirely (no warnings)
         const warnings = [];
+        const bypassEnabled = process.env.BYPASS_SUBSCRIPTION_CHECK === 'true';
 
-        if (process.env.BYPASS_SUBSCRIPTION_CHECK === 'true') {
-            console.log('Bypass subscription check: BYPASS_SUBSCRIPTION_CHECK=true — skipping subscription verification');
-            // intentionally skip checking subscriptions so recruiters can post during dev
-        } else {
-            // 1. On cherche l'abonnement ACTIF et la limite du pack (max_offers)
-            const checkSubQuery = `
-                SELECT p.job_limit, p.name as pack_name
-                FROM recruiter_subscriptions s
-                JOIN packs p ON s.pack_id = p.id
-                WHERE s.recruiter_id = ? 
-                AND s.status = 'active' 
-                AND s.end_date > NOW()
-                LIMIT 1
-            `;
-            
-            const [subscription] = await db.query(checkSubQuery, [recruiterId]);
+        // 1. On cherche l'abonnement ACTIF et la limite du pack (max_offers)
+        const checkSubQuery = `
+            SELECT p.job_limit, p.name as pack_name
+            FROM recruiter_subscriptions s
+            JOIN packs p ON s.pack_id = p.id
+            WHERE s.recruiter_id = ? 
+            AND s.status = 'active' 
+            AND s.end_date >= CURDATE()
+            LIMIT 1
+        `;
+        
+        const [subscription] = await db.query(checkSubQuery, [recruiterId]);
 
-            // Si aucun abonnement n'est trouvé
-            if (!subscription || subscription.length === 0) {
+        // Si aucun abonnement n'est trouvé
+        if (!subscription || subscription.length === 0) {
+            if (bypassEnabled) {
+                console.log('⚠️ BYPASS_SUBSCRIPTION_CHECK=true — accès autorisé sans abonnement (mode développement)');
+                // En mode bypass sans abonnement, on applique une limite par défaut (BASIC = 3 offres)
+                const defaultLimit = 3; // Limite par défaut du pack BASIC
+                
+                // Compter les offres existantes
+                const [countResult] = await db.query(
+                    "SELECT COUNT(*) as total FROM offers WHERE recruiter_id = ?", 
+                    [recruiterId]
+                );
+                
+                const currentOffers = countResult[0].total;
+
+                // Vérifier la limite même en mode bypass
+                if (currentOffers >= defaultLimit) {
+                    return res.status(403).json({
+                        status: 'ERROR',
+                        message: `Limite atteinte ! En mode développement, la limite par défaut est ${defaultLimit} offres. Vous en avez déjà publié ${currentOffers}. Veuillez créer un abonnement pour augmenter votre limite.`
+                    });
+                }
+            } else {
                 return res.status(403).json({
                     status: 'ERROR',
                     message: "Vous devez avoir un abonnement actif pour publier une offre."
                 });
             }
-
+        } else {
+            // Si un abonnement existe, on vérifie TOUJOURS les limites (même en mode bypass)
             // defensive: if job_limit missing, treat as unlimited (large number)
             const packName = subscription[0].pack_name;
             const limitMaxRaw = subscription[0].job_limit;

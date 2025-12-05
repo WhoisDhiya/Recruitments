@@ -58,21 +58,16 @@ exports.checkActiveSubscription = async (req, res) => {
             });
         }
 
+        // ✅ La vérification se fait dans checkActive() avec NOW() côté SQL
+        // Pas besoin de vérifier côté Node.js, la requête SQL le fait déjà
         const subscription = await RecruiterSubscription.checkActive(parseInt(recruiter_id));
         
         if (subscription) {
-            // Vérifier si l'abonnement n'est pas expiré
-            const endDate = new Date(subscription.end_date);
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            
-            if (endDate >= today) {
-                return res.status(200).json({
-                    status: 'SUCCESS',
-                    hasActiveSubscription: true,
-                    data: subscription
-                });
-            }
+            return res.status(200).json({
+                status: 'SUCCESS',
+                hasActiveSubscription: true,
+                data: subscription
+            });
         }
 
         return res.status(200).json({
@@ -92,9 +87,11 @@ exports.checkActiveSubscription = async (req, res) => {
 
 exports.createCheckoutSession = async (req, res) => {
     if (paymentsDisabled) {
+        const reason = !hasStripeKey ? 'Stripe is not configured (STRIPE_SECRET_KEY missing)' : 'Payments are disabled';
+        console.error('❌ Payment attempt blocked:', reason);
         return res.status(503).json({ 
             status: 'UNAVAILABLE', 
-            message: 'Payments are temporarily disabled. Please contact support.' 
+            message: `Les paiements ne sont pas activés. ${reason}. Veuillez configurer Stripe ou contacter l'administrateur.` 
         });
     }
     try {
@@ -354,25 +351,77 @@ exports.createPendingRecruiter = async (req, res) => {
             return res.status(400).json({ status: 'ERROR', message: 'Required fields missing' });
         }
 
+        // Validation du format email (structure Gmail/email valide)
+        // Doit avoir au moins 2 caractères après le point final (ex: .com, .fr, .org)
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+        if (!emailRegex.test(email.trim())) {
+            return res.status(400).json({ 
+                status: 'ERROR', 
+                message: 'Format d\'email invalide. Veuillez entrer un email valide (ex: exemple@gmail.com)' 
+            });
+        }
+
+        // Validation de l'email de l'entreprise si fourni (pour les recruteurs)
+        if (company_email && company_email.trim()) {
+            if (!emailRegex.test(company_email.trim())) {
+                return res.status(400).json({ 
+                    status: 'ERROR', 
+                    message: 'Format d\'email de l\'entreprise invalide. Veuillez entrer un email valide (ex: contact@company.com)' 
+                });
+            }
+        }
+
+        // Validation du mot de passe
+        // Au moins 8 caractères, une majuscule, une minuscule, un chiffre
+        const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+        if (!passwordRegex.test(password)) {
+            return res.status(400).json({ 
+                status: 'ERROR', 
+                message: 'Le mot de passe doit contenir au moins 8 caractères, une majuscule, une minuscule et un chiffre' 
+            });
+        }
+
+        // Normaliser l'email (trim et lowercase pour éviter les doublons)
+        const normalizedEmail = email.trim().toLowerCase();
+        
+        // Vérifier si l'email existe déjà dans users
+        const User = require('../models/User');
+        const existingUser = await User.findByEmail(normalizedEmail);
+        if (existingUser) {
+            return res.status(409).json({ 
+                status: 'ERROR', 
+                message: 'Cet email est déjà utilisé' 
+            });
+        }
+
         // Hash the password before storing
         const hashed = await bcrypt.hash(String(password), 10);
 
         const pendingId = await PendingRecruiter.create({
             last_name,
             first_name,
-            email,
+            email: normalizedEmail,
             hashed_password: hashed,
             role: role || 'recruiter',
             company_name,
             industry,
             description,
-            company_email,
+            company_email: company_email ? company_email.trim().toLowerCase() : company_email,
             company_address
         });
 
         return res.status(201).json({ status: 'SUCCESS', pending_id: pendingId });
     } catch (err) {
         console.error('Error creating pending recruiter:', err);
+        
+        // Gérer spécifiquement les erreurs de duplication d'email
+        if (err.code === 'ER_DUP_ENTRY' || err.errno === 1062) {
+            return res.status(409).json({ 
+                status: 'ERROR', 
+                message: 'Cet email est déjà utilisé' 
+            });
+        }
+        
         res.status(500).json({ status: 'ERROR', message: 'Failed to create pending recruiter', error: err.message });
     }
 };

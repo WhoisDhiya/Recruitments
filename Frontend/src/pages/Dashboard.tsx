@@ -42,10 +42,31 @@ const Dashboard: React.FC<DashboardPropsExtended> = ({ onLogout, user }) => {
   useEffect(() => {
     const loadDashboardStats = async () => {
       try {
+        // Vérifier que l'utilisateur existe toujours
+        if (user?.id) {
+          const verification = await apiService.verifyUser();
+          if (!verification.valid) {
+            console.log('❌ User no longer exists, redirecting to signin');
+            if (onLogout) {
+              onLogout();
+            }
+            window.location.href = '/signin';
+            return;
+          }
+        }
+        
         // Les statistiques seront mises à jour par d'autres useEffect
         setIsLoading(false);
       } catch (error) {
         console.error('Erreur lors du chargement des statistiques:', error);
+        // Si erreur de vérification, déconnecter
+        if (error instanceof Error && (error.message.includes('supprimé') || error.message.includes('401'))) {
+          if (onLogout) {
+            onLogout();
+          }
+          window.location.href = '/signin';
+          return;
+        }
         setIsLoading(false);
       }
     };
@@ -55,7 +76,7 @@ const Dashboard: React.FC<DashboardPropsExtended> = ({ onLogout, user }) => {
     } else {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [user, onLogout]);
 
   // Charger le nombre de notifications non lues (Job Alerts)
   useEffect(() => {

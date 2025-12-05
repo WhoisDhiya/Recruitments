@@ -20,7 +20,6 @@ const sidebarItems = [
   { id: 'My_Jobs', label: 'My Jobs', icon: '💼' },
   { id: 'Saved_Candidate', label: 'Saved Candidate', icon: '⭐' },
   { id: 'Plans_Billing', label: 'Plans & Billing', icon: '💳' },
-  { id: 'All_Companies', label: 'All Companies', icon: '🏢' },
   { id: 'Settings', label: 'Settings', icon: '⚙️' }
 ];
 

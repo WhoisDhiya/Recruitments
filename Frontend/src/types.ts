@@ -183,7 +183,7 @@ export interface SignInProps {
 
 // Types pour les états
 export type ActiveTab = 'Home' | 'Overview' | 'Applied_Jobs' | 'Saved_Jobs' | 'Job_Alert' | 'Settings';
-export type RecruiterActiveTab = 'Overview' | 'Employers_Profile' | 'Post_a_Job' | 'My_Jobs' | 'Saved_Candidate' | 'Plans_Billing' | 'All_Companies' | 'Settings';
+export type RecruiterActiveTab = 'Overview' | 'Employers_Profile' | 'Post_a_Job' | 'My_Jobs' | 'Saved_Candidate' | 'Plans_Billing' | 'Settings';
 export type UserRole = 'recruiter' | 'candidate' | 'admin';
 export type ApplicationStatus = 'pending' | 'reviewed' | 'accepted' | 'rejected' | 'interview';
 

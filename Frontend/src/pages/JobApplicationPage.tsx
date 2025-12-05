@@ -31,6 +31,27 @@ const JobApplicationPage: React.FC<JobApplicationPageProps> = ({ user, isAuthent
     coverLetter: '',
     agreeToTerms: false
   });
+  const [phoneError, setPhoneError] = useState<string>('');
+
+  // Fonction de validation du numéro de téléphone
+  const validatePhone = (phone: string): boolean => {
+    // Supprimer les espaces, tirets, parenthèses et points
+    const cleanedPhone = phone.replace(/[\s\-\(\)\.]/g, '');
+    
+    // Formats acceptés :
+    // - Numéros internationaux : +216XXXXXXXXX, +33XXXXXXXXX, etc.
+    // - Numéros locaux : 0XXXXXXXXX (10 chiffres commençant par 0)
+    // - Numéros avec indicatif : 216XXXXXXXXX (sans le +)
+    const phoneRegex = /^(\+?\d{1,4}[\s\-]?)?(\(?\d{1,4}\)?[\s\-]?)?[\d\s\-]{8,15}$/;
+    
+    // Vérifier que le numéro nettoyé contient au moins 8 chiffres et max 15
+    const digitsOnly = cleanedPhone.replace(/\D/g, '');
+    if (digitsOnly.length < 8 || digitsOnly.length > 15) {
+      return false;
+    }
+    
+    return phoneRegex.test(phone);
+  };
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -74,6 +95,15 @@ const JobApplicationPage: React.FC<JobApplicationPageProps> = ({ user, isAuthent
         ...prev,
         [name]: value
       }));
+      
+      // Validation en temps réel pour le téléphone
+      if (name === 'phone') {
+        if (value && !validatePhone(value)) {
+          setPhoneError('Format invalide (ex: +216 23 235 891 ou 0123456789)');
+        } else {
+          setPhoneError('');
+        }
+      }
     }
   };
 
@@ -115,6 +145,13 @@ const JobApplicationPage: React.FC<JobApplicationPageProps> = ({ user, isAuthent
     }
     if (!formData.phone.trim()) {
       setError('Phone number is required');
+      setPhoneError('Phone number is required');
+      return false;
+    }
+    
+    if (!validatePhone(formData.phone)) {
+      setError('Please enter a valid phone number (e.g., +216 23 235 891 or 0123456789)');
+      setPhoneError('Format invalide (ex: +216 23 235 891 ou 0123456789)');
       return false;
     }
     if (!formData.address.trim()) {
@@ -390,10 +427,28 @@ const JobApplicationPage: React.FC<JobApplicationPageProps> = ({ user, isAuthent
                   name="phone"
                   value={formData.phone}
                   onChange={handleInputChange}
-                  className="form-input"
-                  placeholder="Enter your phone number"
+                  onBlur={(e) => {
+                    // Validation au blur
+                    if (e.target.value && !validatePhone(e.target.value)) {
+                      setPhoneError('Format invalide (ex: +216 23 235 891 ou 0123456789)');
+                    } else {
+                      setPhoneError('');
+                    }
+                  }}
+                  className={`form-input ${phoneError ? 'error' : ''}`}
+                  placeholder="Ex: +216 23 235 891 ou 0123456789"
                   disabled={isSubmitting}
                 />
+                {phoneError && (
+                  <p className="error-message" style={{ color: 'red', fontSize: '0.875rem', marginTop: '0.25rem' }}>
+                    {phoneError}
+                  </p>
+                )}
+                {formData.phone && !phoneError && validatePhone(formData.phone) && (
+                  <p style={{ color: 'green', fontSize: '0.875rem', marginTop: '0.25rem' }}>
+                    ✓ Numéro de téléphone valide
+                  </p>
+                )}
               </div>
 
               {/* Address */}

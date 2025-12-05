@@ -3,7 +3,6 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import './RecruiterDashboard.css';
 import type { DashboardProps, PostedJob, RecruiterStats } from '../types';
 import Settings from './Settings';
-import Homepage from './homepage';
 import EmployerProfile from './EmployerProfile';
 import PostJobForm from './PostJobForm';
 import SubscriptionPlans from './SubscriptionPlans';
@@ -49,7 +48,6 @@ interface ApplicationDetails {
 }
 
 type RecruiterTab =
-  | 'Home'
   | 'Overview'
   | 'Employers_Profile'
   | 'Find_Candidate'
@@ -57,9 +55,7 @@ type RecruiterTab =
   | 'My_Jobs'
   | 'Saved_Candidate'
   | 'Plans_Billing'
-  | 'All_Companies'
-  | 'Settings'
-  | 'Customer_Supports';
+  | 'Settings';
 
 const RecruiterDashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
   const navigate = useNavigate();
@@ -86,12 +82,10 @@ const RecruiterDashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
 
   const navigationItems = useMemo(
     () => [
-      { id: 'Home', label: 'Home' },
       { id: 'Find_Candidate', label: 'Find Candidate' },
       { id: 'Dashboard', label: 'Dashboard' },
       { id: 'My_Jobs', label: 'My Jobs' },
-      { id: 'Applications', label: 'Applications' },
-      { id: 'Customer_Supports', label: 'Customer Support' }
+      { id: 'Applications', label: 'Applications' }
     ],
     []
   );
@@ -104,7 +98,6 @@ const RecruiterDashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
       { id: 'Post_a_Job', label: 'Post a Job', icon: '➕' },
       { id: 'My_Jobs', label: 'My Jobs', icon: '💼' },
       { id: 'Saved_Candidate', label: 'Saved Candidate', icon: '⭐' },
-      { id: 'All_Companies', label: 'All Companies', icon: '🏢' },
       { id: 'Settings', label: 'Settings', icon: '⚙️' }
     ];
     if (paymentsEnabled) {
@@ -272,10 +265,37 @@ const RecruiterDashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
   }, [openDropdown]);
 
   useEffect(() => {
-    if (user?.role === 'recruiter') {
-      loadDashboardData();
-    }
-  }, [user, location.pathname]);
+    const verifyAndLoad = async () => {
+      if (user?.role === 'recruiter') {
+        try {
+          // Vérifier que l'utilisateur existe toujours
+          const verification = await apiService.verifyUser();
+          if (!verification.valid) {
+            console.log('❌ User no longer exists, redirecting to signin');
+            if (onLogout) {
+              onLogout();
+            }
+            window.location.href = '/signin';
+            return;
+          }
+          loadDashboardData();
+        } catch (error) {
+          console.error('Error verifying user:', error);
+          // Si erreur de vérification, déconnecter
+          if (error instanceof Error && (error.message.includes('supprimé') || error.message.includes('401'))) {
+            if (onLogout) {
+              onLogout();
+            }
+            window.location.href = '/signin';
+            return;
+          }
+          loadDashboardData();
+        }
+      }
+    };
+    
+    verifyAndLoad();
+  }, [user, location.pathname, onLogout]);
 
   useEffect(() => {
     if (!savedCandidatesKey) return;
@@ -336,6 +356,19 @@ const RecruiterDashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
 
   const handleUpdateJob = async () => {
     if (!editingJob) return;
+
+    // Validation: la date d'expiration ne peut pas être avant aujourd'hui
+    if (editFormData.date_expiration) {
+      const expirationDate = new Date(editFormData.date_expiration);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      expirationDate.setHours(0, 0, 0, 0);
+      
+      if (expirationDate < today) {
+        alert('La date d\'expiration ne peut pas être antérieure à aujourd\'hui.');
+        return;
+      }
+    }
 
     try {
       await apiService.updateOffer(editingJob.id, {
@@ -456,9 +489,6 @@ const RecruiterDashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
 
   const handleTopNavClick = (itemId: string) => {
     switch (itemId) {
-      case 'Home':
-        setActiveTab('Home');
-        break;
       case 'Find_Candidate':
         setActiveTab('Find_Candidate');
         break;
@@ -470,9 +500,6 @@ const RecruiterDashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
         break;
       case 'Applications':
         setActiveTab('Find_Candidate');
-        break;
-      case 'Customer_Supports':
-        setActiveTab('Customer_Supports');
         break;
       default:
         break;
@@ -568,13 +595,6 @@ const RecruiterDashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
                         onClick={() => handleMenuAction('view', job.id)}
                       >
                         👁️ View Detail
-                      </button>
-
-                      <button
-                        className="dropdown-item"
-                        onClick={() => handleMenuAction('promote', job.id)}
-                      >
-                        ➕ Promote Job
                       </button>
 
                       <button
@@ -725,8 +745,6 @@ const RecruiterDashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
 
   const renderMainContent = () => {
     switch (activeTab) {
-      case 'Home':
-        return <Homepage user={user} isAuthenticated={true} onLogout={onLogout} />;
       case 'Overview':
         return (
           <>
@@ -821,10 +839,6 @@ const RecruiterDashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
             <SubscriptionPlans user={user} />
           </div>
         );
-      case 'All_Companies':
-        return renderComingSoon('All Companies');
-      case 'Customer_Supports':
-        return renderComingSoon('Customer Support', 'Support tools are on the way.');
       default:
         return renderComingSoon(sidebarItems.find(item => item.id === activeTab)?.label || 'Coming soon');
     }
@@ -1068,10 +1082,12 @@ const RecruiterDashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
                 <label>Expiration Date</label>
                 <input
                   type="date"
+                  min={new Date().toISOString().split('T')[0]}
                   value={editFormData.date_expiration || ''}
                   onChange={(e) => setEditFormData({ ...editFormData, date_expiration: e.target.value })}
                   className="form-input"
                 />
+                <small className="text-gray-500">La date d'expiration doit être supérieure ou égale à aujourd'hui</small>
               </div>
             </div>
 

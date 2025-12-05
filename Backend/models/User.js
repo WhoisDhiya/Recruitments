@@ -11,9 +11,10 @@ class User {
         return result.insertId;
     }
 
-    // Trouver un utilisateur par email
+    // Trouver un utilisateur par email (case-insensitive)
     static async findByEmail(email) {
-        const [rows] = await db.query('SELECT * FROM users WHERE email = ?', [email]);
+        const normalizedEmail = email.trim().toLowerCase();
+        const [rows] = await db.query('SELECT * FROM users WHERE LOWER(email) = ?', [normalizedEmail]);
         return rows[0];
     }
 

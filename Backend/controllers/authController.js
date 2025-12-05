@@ -43,6 +43,26 @@ exports.signup = async (req, res) => {
             });
         }
 
+        // Validation du format email (structure Gmail/email valide)
+        // Doit avoir au moins 2 caractères après le point final (ex: .com, .fr, .org)
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+        if (!emailRegex.test(email.trim())) {
+            return res.status(400).json({ 
+                status: 'ERROR', 
+                message: 'Format d\'email invalide. Veuillez entrer un email valide (ex: exemple@gmail.com)' 
+            });
+        }
+
+        // Validation du mot de passe
+        // Au moins 8 caractères, une majuscule, une minuscule, un chiffre
+        const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+        if (!passwordRegex.test(password)) {
+            return res.status(400).json({ 
+                status: 'ERROR', 
+                message: 'Le mot de passe doit contenir au moins 8 caractères, une majuscule, une minuscule et un chiffre' 
+            });
+        }
+
         // Validation du rôle
         const validRoles = ['recruiter', 'candidate', 'admin'];
         if (!validRoles.includes(role)) {
@@ -67,10 +87,22 @@ exports.signup = async (req, res) => {
                     message: 'Pour les recruteurs, tous les champs de l\'entreprise sont requis'
                 });
             }
+            
+            // Validation de l'email de l'entreprise
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+            if (!emailRegex.test(company_email.trim())) {
+                return res.status(400).json({
+                    status: 'ERROR',
+                    message: 'Format d\'email de l\'entreprise invalide. Veuillez entrer un email valide (ex: contact@company.com)'
+                });
+            }
         }
 
+        // Normaliser l'email (trim et lowercase pour éviter les doublons)
+        const normalizedEmail = email.trim().toLowerCase();
+        
         // Vérifier si l'email existe déjà
-        const existingUser = await User.findByEmail(email);
+        const existingUser = await User.findByEmail(normalizedEmail);
         if (existingUser) {
             return res.status(409).json({ 
                 status: 'ERROR', 
@@ -81,13 +113,26 @@ exports.signup = async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10);
         
         // Créer l'utilisateur de base
-        const userId = await User.create({
-            last_name,
-            first_name,
-            email,
-            password: hashedPassword,
-            role
-        });
+        let userId;
+        try {
+            userId = await User.create({
+                last_name,
+                first_name,
+                email: normalizedEmail,
+                password: hashedPassword,
+                role
+            });
+        } catch (dbError) {
+            // Gérer l'erreur MySQL pour les emails dupliqués (code 1062)
+            if (dbError.code === 'ER_DUP_ENTRY' || dbError.errno === 1062) {
+                return res.status(409).json({ 
+                    status: 'ERROR', 
+                    message: 'Cet email est déjà utilisé' 
+                });
+            }
+            // Si c'est une autre erreur, la propager
+            throw dbError;
+        }
 
         // Créer le profil spécifique selon le rôle
         if (role === 'candidate') {
@@ -129,6 +174,15 @@ exports.signup = async (req, res) => {
         });
     } catch (error) {
         console.error('Erreur signup:', error);
+        
+        // Gérer spécifiquement les erreurs de duplication d'email
+        if (error.code === 'ER_DUP_ENTRY' || error.errno === 1062) {
+            return res.status(409).json({ 
+                status: 'ERROR', 
+                message: 'Cet email est déjà utilisé' 
+            });
+        }
+        
         res.status(500).json({ 
             status: 'ERROR', 
             message: "Erreur lors de l'inscription", 
@@ -162,6 +216,18 @@ exports.login = async (req, res) => {
                 status: 'ERROR', 
                 message: 'Mot de passe incorrect' 
             });
+        }
+
+        // Vérifier si l'utilisateur admin existe dans la table admins
+        if (user.role === 'admin') {
+            const Admin = require('../models/Admin');
+            const adminProfile = await Admin.findByUserId(user.id);
+            if (!adminProfile) {
+                return res.status(403).json({
+                    status: 'ERROR',
+                    message: 'Compte administrateur non configuré. Veuillez contacter le support.'
+                });
+            }
         }
 
         // Générer le token JWT
@@ -201,6 +267,41 @@ exports.logout = (req, res) => {
         status: 'SUCCESS',
         message: `Déconnexion réussie pour ${req.user.email}`
     });
+};
+
+// Vérifier que l'utilisateur existe toujours (pour vérification au chargement)
+exports.verifyUser = async (req, res) => {
+    try {
+        // req.user est déjà défini par le middleware auth
+        const userId = req.user.user_id;
+        const user = await User.findById(userId);
+        
+        if (!user) {
+            return res.status(401).json({
+                status: 'ERROR',
+                message: 'Utilisateur supprimé. Veuillez vous reconnecter.'
+            });
+        }
+        
+        res.status(200).json({
+            status: 'SUCCESS',
+            message: 'Utilisateur valide',
+            data: {
+                id: user.id,
+                first_name: user.first_name,
+                last_name: user.last_name,
+                email: user.email,
+                role: user.role
+            }
+        });
+    } catch (error) {
+        console.error('Erreur verifyUser:', error);
+        res.status(500).json({
+            status: 'ERROR',
+            message: 'Erreur lors de la vérification',
+            error: error.message
+        });
+    }
 };
 
 // Mettre à jour le profil utilisateur

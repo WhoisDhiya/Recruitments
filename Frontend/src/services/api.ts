@@ -40,7 +40,21 @@ class ApiService {
     const data = await response.json();
 
     if (!response.ok) {
-      if (response.status === 401) throw new Error(data.message || 'Session expired. Please log in again.');
+      // Si l'utilisateur a été supprimé ou le token est invalide, déconnecter automatiquement
+      if (response.status === 401 || response.status === 403) {
+        const errorMessage = data.message || 'Session expired. Please log in again.';
+        
+        // Vérifier si c'est une erreur de suppression d'utilisateur
+        if (errorMessage.includes('supprimé') || errorMessage.includes('Utilisateur supprimé')) {
+          console.log('🚪 User deleted, logging out...');
+          this.logout();
+          // Déclencher un événement pour que App.tsx puisse réagir
+          window.dispatchEvent(new CustomEvent('userDeleted'));
+        }
+        
+        throw new Error(errorMessage);
+      }
+      
       // Include error details in development
       const errorMessage = data.error 
         ? `${data.message || 'Erreur API'}: ${data.error}` 
@@ -137,6 +151,34 @@ class ApiService {
     this.token = storedToken;
     console.log('✅ Authenticated: token and user found');
     return true;
+  }
+
+  // Vérifier que l'utilisateur existe toujours dans la base de données
+  async verifyUser(): Promise<{ valid: boolean; user?: UserType }> {
+    try {
+      const response = await this.request<{ id: number; first_name: string; last_name: string; email: string; role: string }>('/auth/verify');
+      if (response.data) {
+        // Mettre à jour les informations utilisateur dans localStorage
+        const updatedUser = {
+          id: response.data.id,
+          first_name: response.data.first_name,
+          last_name: response.data.last_name,
+          email: response.data.email,
+          role: response.data.role
+        };
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        return { valid: true, user: updatedUser as UserType };
+      }
+      return { valid: false };
+    } catch (error) {
+      console.error('❌ User verification failed:', error);
+      // Si l'utilisateur a été supprimé, déconnecter
+      if (error instanceof Error && (error.message.includes('supprimé') || error.message.includes('Utilisateur supprimé'))) {
+        this.logout();
+        window.dispatchEvent(new CustomEvent('userDeleted'));
+      }
+      return { valid: false };
+    }
   }
 
   // ===== ADMIN ROUTES =====
@@ -1054,7 +1096,16 @@ class ApiService {
     const data = await response.json();
 
     if (!response.ok) {
+      // Gérer spécifiquement les erreurs Stripe
+      if (response.status === 503 && (data.status === 'UNAVAILABLE' || data.message?.includes('disabled'))) {
+        throw new Error(data.message || 'Payments are temporarily disabled or Stripe is not configured');
+      }
       throw new Error(data.message || 'Failed to create checkout session');
+    }
+
+    // Vérifier que l'URL est présente
+    if (!data.url) {
+      throw new Error('No payment URL received from server. Stripe may not be configured.');
     }
 
     return { url: data.url };

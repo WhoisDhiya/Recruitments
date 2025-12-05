@@ -31,6 +31,40 @@ exports.createCheckoutSession = async (req, res) => {
             return res.status(400).json({ message: "Pack introuvable" });
         }
 
+        // Récupérer l'email du recruteur pour Stripe
+        let customerEmail = null;
+        
+        if (recruiter_id) {
+            // Si on a un recruiter_id, récupérer l'email depuis la table users via recruiter
+            try {
+                const [recruiterRows] = await db.query(
+                    "SELECT u.email FROM users u INNER JOIN recruiters r ON u.id = r.user_id WHERE r.id = ?",
+                    [recruiter_id]
+                );
+                if (recruiterRows.length > 0) {
+                    customerEmail = recruiterRows[0].email;
+                }
+            } catch (err) {
+                console.warn('Could not fetch recruiter email:', err);
+            }
+        } else if (pending_id) {
+            // Si on a un pending_id, récupérer l'email depuis pending_recruiters
+            try {
+                const [pendingRows] = await db.query(
+                    "SELECT email FROM pending_recruiters WHERE id = ?",
+                    [pending_id]
+                );
+                if (pendingRows.length > 0) {
+                    customerEmail = pendingRows[0].email;
+                }
+            } catch (err) {
+                console.warn('Could not fetch pending recruiter email:', err);
+            }
+        } else if (recruiter_payload && recruiter_payload.email) {
+            // Si on a un recruiter_payload avec email, utiliser cet email
+            customerEmail = recruiter_payload.email;
+        }
+
         // Build metadata for later retrieval after payment
         const metadata = {
             pack_id: String(pack_id),
@@ -39,7 +73,8 @@ exports.createCheckoutSession = async (req, res) => {
             ...(recruiter_payload && { recruiter_payload: JSON.stringify(recruiter_payload) })
         };
 
-        const session = await stripe.checkout.sessions.create({
+        // Configuration de la session Stripe
+        const sessionConfig = {
             payment_method_types: ["card"],
             mode: "payment",
             line_items: [
@@ -56,9 +91,16 @@ exports.createCheckoutSession = async (req, res) => {
                 },
             ],
             metadata,
-            success_url: `http://localhost:3000/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-            cancel_url: `http://localhost:3000/payment-cancel`,
-        });
+            success_url: `${process.env.CLIENT_URL || 'http://localhost:5173'}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+            cancel_url: `${process.env.CLIENT_URL || 'http://localhost:5173'}/payment-cancel`,
+        };
+
+        // Ajouter l'email du client si disponible
+        if (customerEmail) {
+            sessionConfig.customer_email = customerEmail;
+        }
+
+        const session = await stripe.checkout.sessions.create(sessionConfig);
 
         return res.json({ url: session.url });
 

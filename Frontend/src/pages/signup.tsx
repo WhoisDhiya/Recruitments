@@ -43,6 +43,12 @@ const App = () => {
     const [isSuccess, setIsSuccess] = useState<boolean>(false);
     const [isLoading, setIsLoading] = useState<boolean>(false);
     
+    // Validation states for real-time feedback
+    const [emailError, setEmailError] = useState<string>("");
+    const [passwordError, setPasswordError] = useState<string>("");
+    const [passwordStrength, setPasswordStrength] = useState<{ valid: boolean; message: string }>({ valid: false, message: '' });
+    const [companyEmailError, setCompanyEmailError] = useState<string>("");
+    
     // Pack selection state (for recruiters) - Always show packs for recruiters
     const [packs, setPacks] = useState<any[]>([]);
     const [selectedPack, setSelectedPack] = useState<number | null>(null);
@@ -52,19 +58,71 @@ const App = () => {
     const [pendingRecruiterPayload, setPendingRecruiterPayload] = useState<Record<string, any> | null>(null);
     const [pendingRecruiterId, setPendingRecruiterId] = useState<number | null>(null);
 
+    // Validation functions
+    const validateEmail = (email: string): boolean => {
+        // Email regex: doit avoir au moins 2 caractères après le point final (ex: .com, .fr, .org)
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+        return emailRegex.test(email.trim());
+    };
+
+    const validatePassword = (password: string): { valid: boolean; message: string } => {
+        if (password.length < 8) {
+            return { valid: false, message: 'Le mot de passe doit contenir au moins 8 caractères' };
+        }
+        if (!/[a-z]/.test(password)) {
+            return { valid: false, message: 'Le mot de passe doit contenir au moins une minuscule' };
+        }
+        if (!/[A-Z]/.test(password)) {
+            return { valid: false, message: 'Le mot de passe doit contenir au moins une majuscule' };
+        }
+        if (!/\d/.test(password)) {
+            return { valid: false, message: 'Le mot de passe doit contenir au moins un chiffre' };
+        }
+        return { valid: true, message: '' };
+    };
+
     // Function to handle form submission
     const handleSignup = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         setMessage(null);
         setIsSuccess(false);
 
+        // Validate required fields first
+        if (!fullName || !fullName.trim()) {
+            setMessage("Le nom complet est requis.");
+            return;
+        }
+
+        if (!email || !email.trim()) {
+            setMessage("L'email est requis.");
+            return;
+        }
+
+        // Validate email format
+        if (!validateEmail(email)) {
+            setMessage("Format d'email invalide. Veuillez entrer un email valide (ex: exemple@gmail.com).");
+            return;
+        }
+
+        if (!password || !password.trim()) {
+            setMessage("Le mot de passe est requis.");
+            return;
+        }
+
+        // Validate password strength
+        const passwordValidation = validatePassword(password);
+        if (!passwordValidation.valid) {
+            setMessage(passwordValidation.message);
+            return;
+        }
+
         if (password !== confirmPassword) {
-            setMessage("Passwords do not match. Please check both fields.");
+            setMessage("Les mots de passe ne correspondent pas. Veuillez vérifier les deux champs.");
             return;
         }
 
         if (!isAgreed) {
-            setMessage("You must agree to the Terms of Services.");
+            setMessage("Vous devez accepter les conditions d'utilisation.");
             return;
         }
 
@@ -72,24 +130,6 @@ const App = () => {
 
         try {
             // --- START: DATA TRANSFORMATION TO MATCH BACKEND MODEL ---
-            // Validate required fields first
-            if (!fullName || !fullName.trim()) {
-                setMessage("Full name is required.");
-                setIsLoading(false);
-                return;
-            }
-
-            if (!email || !email.trim()) {
-                setMessage("Email is required.");
-                setIsLoading(false);
-                return;
-            }
-
-            if (!password || !password.trim()) {
-                setMessage("Password is required.");
-                setIsLoading(false);
-                return;
-            }
 
             // Split full name into first_name and last_name
             const nameParts = fullName.trim().split(/\s+/).filter(part => part.length > 0);
@@ -106,7 +146,7 @@ const App = () => {
             const payload: Record<string, unknown> = {
                 last_name: last_name,
                 first_name: first_name,
-                email: email.trim(),
+                email: email.trim().toLowerCase(),
                 password: password,
                 role: userType
             };
@@ -117,10 +157,22 @@ const App = () => {
                 payload.cv = 'default_cv.pdf';
                 payload.image = 'default_image.jpg';
             } else if (userType === 'recruiter') {
+                // Validation de l'email de l'entreprise
+                if (!companyEmail || !companyEmail.trim()) {
+                    setMessage("L'email de l'entreprise est requis.");
+                    return;
+                }
+                
+                if (!validateEmail(companyEmail)) {
+                    setMessage("Format d'email de l'entreprise invalide. Veuillez entrer un email valide (ex: contact@company.com).");
+                    setCompanyEmailError("Format d'email invalide");
+                    return;
+                }
+                
                 payload.company_name = companyName;
                 payload.industry = industry;
                 payload.description = companyDescription;
-                payload.company_email = companyEmail;
+                payload.company_email = companyEmail.trim().toLowerCase();
                 payload.company_address = companyAddress;
             }
             
@@ -161,7 +213,7 @@ const App = () => {
 
                 // Success case: Extract the real userId from the backend response
                 const userId = result.data.user_id; 
-                setCreatedUserId(userId);
+                console.log('User created with ID:', userId);
 
                 // For candidates, redirect to sign in
                 setMessage(`Account created successfully! Redirecting to login...`);
@@ -268,12 +320,34 @@ const App = () => {
             
             // Redirect to Stripe checkout
             console.log('Redirecting to Stripe checkout:', url);
+            if (!url) {
+                throw new Error('No payment URL received from server');
+            }
             window.location.href = url;
         } catch (err: any) {
             console.error('Error creating checkout session:', err);
-            setMessage(err.message || 'Failed to initiate payment. Please try again.');
+            setIsSuccess(false);
+            
+            // Messages d'erreur spécifiques selon le type d'erreur
+            let errorMessage = 'Failed to initiate payment. Please try again.';
+            if (err.message) {
+                if (err.message.includes('Payments are temporarily disabled') || 
+                    err.message.includes('Stripe is not configured') ||
+                    err.message.includes('UNAVAILABLE')) {
+                    errorMessage = 'Les paiements ne sont pas activés. Veuillez configurer Stripe sur le serveur. Contactez l\'administrateur.';
+                } else if (err.message.includes('Pack introuvable')) {
+                    errorMessage = 'Le pack sélectionné est introuvable. Veuillez réessayer.';
+                } else {
+                    errorMessage = err.message;
+                }
+            }
+            
+            setMessage(errorMessage);
             setIsProcessingPayment(false);
             setSelectedPack(null);
+            
+            // Scroll to top to show error message
+            window.scrollTo({ top: 0, behavior: 'smooth' });
         }
     };
 
@@ -430,26 +504,76 @@ const App = () => {
                             />
 
                             {/* Email */}
-                            <input 
-                                type="email" 
-                                placeholder="Email address" 
-                                value={email} 
-                                onChange={(e) => setEmail(e.target.value)} 
-                                className={inputClasses} 
-                                required 
-                            />
-
-                            {/* Password */}
-                            <div className="relative">
+                            <div>
                                 <input 
-                                    type="password" 
-                                    placeholder="Password" 
-                                    value={password} 
-                                    onChange={(e) => setPassword(e.target.value)} 
-                                    className={inputClasses + " pr-10"} 
+                                    type="email" 
+                                    placeholder="Email address (ex: exemple@gmail.com)" 
+                                    value={email} 
+                                    onChange={(e) => {
+                                        const value = e.target.value;
+                                        setEmail(value);
+                                        if (value && !validateEmail(value)) {
+                                            setEmailError("Format d'email invalide. Exemple: exemple@gmail.com");
+                                        } else {
+                                            setEmailError("");
+                                        }
+                                    }} 
+                                    onBlur={(e) => {
+                                        if (e.target.value && !validateEmail(e.target.value)) {
+                                            setEmailError("Format d'email invalide. Exemple: exemple@gmail.com");
+                                        } else {
+                                            setEmailError("");
+                                        }
+                                    }}
+                                    className={`${inputClasses} ${emailError ? 'border-red-500' : ''}`}
                                     required 
                                 />
-                                <Lock className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 cursor-pointer" />
+                                {emailError && (
+                                    <p className="mt-1 text-sm text-red-600">{emailError}</p>
+                                )}
+                            </div>
+
+                            {/* Password */}
+                            <div>
+                                <div className="relative">
+                                    <input 
+                                        type="password" 
+                                        placeholder="Mot de passe (min. 8 caractères, 1 majuscule, 1 minuscule, 1 chiffre)" 
+                                        value={password} 
+                                        onChange={(e) => {
+                                            const value = e.target.value;
+                                            setPassword(value);
+                                            if (value) {
+                                                const validation = validatePassword(value);
+                                                setPasswordStrength(validation);
+                                                setPasswordError(validation.valid ? "" : validation.message);
+                                            } else {
+                                                setPasswordStrength({ valid: false, message: '' });
+                                                setPasswordError("");
+                                            }
+                                        }} 
+                                        className={`${inputClasses} pr-10 ${passwordError ? 'border-red-500' : password && passwordStrength.valid ? 'border-green-500' : ''}`}
+                                        required 
+                                    />
+                                    <Lock className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 cursor-pointer" />
+                                </div>
+                                {passwordError && (
+                                    <p className="mt-1 text-sm text-red-600">{passwordError}</p>
+                                )}
+                                {password && passwordStrength.valid && (
+                                    <p className="mt-1 text-sm text-green-600">✓ Mot de passe valide</p>
+                                )}
+                                {password && !passwordStrength.valid && (
+                                    <div className="mt-1 text-xs text-gray-600">
+                                        <p>Le mot de passe doit contenir :</p>
+                                        <ul className="list-disc list-inside ml-2">
+                                            <li className={password.length >= 8 ? 'text-green-600' : ''}>Au moins 8 caractères</li>
+                                            <li className={/[a-z]/.test(password) ? 'text-green-600' : ''}>Une minuscule</li>
+                                            <li className={/[A-Z]/.test(password) ? 'text-green-600' : ''}>Une majuscule</li>
+                                            <li className={/\d/.test(password) ? 'text-green-600' : ''}>Un chiffre</li>
+                                        </ul>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Confirm Password */}
@@ -554,13 +678,35 @@ const App = () => {
                                                     type="email" 
                                                     placeholder="contact@yourcompany.com" 
                                                     value={companyEmail} 
-                                                    onChange={(e) => setCompanyEmail(e.target.value)} 
-                                                    className={inputClasses + " pl-10"} 
+                                                    onChange={(e) => {
+                                                        setCompanyEmail(e.target.value);
+                                                        // Validation en temps réel
+                                                        if (e.target.value && !validateEmail(e.target.value)) {
+                                                            setCompanyEmailError("Format d'email invalide (ex: contact@company.com)");
+                                                        } else {
+                                                            setCompanyEmailError("");
+                                                        }
+                                                    }}
+                                                    onBlur={(e) => {
+                                                        // Validation au blur
+                                                        if (e.target.value && !validateEmail(e.target.value)) {
+                                                            setCompanyEmailError("Format d'email invalide (ex: contact@company.com)");
+                                                        } else {
+                                                            setCompanyEmailError("");
+                                                        }
+                                                    }}
+                                                    className={`${inputClasses} ${companyEmailError ? 'border-red-500' : ''} pl-10`}
                                                     maxLength={255}
                                                     required 
                                                 />
                                                 <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                                             </div>
+                                            {companyEmailError && (
+                                                <p className="mt-1 text-sm text-red-600">{companyEmailError}</p>
+                                            )}
+                                            {companyEmail && !companyEmailError && validateEmail(companyEmail) && (
+                                                <p className="mt-1 text-sm text-green-600">✓ Email valide</p>
+                                            )}
                                             <p className="text-xs text-gray-500 mt-1">Official company email address</p>
                                         </div>
 
@@ -631,8 +777,8 @@ const App = () => {
 
                             {/* Message Display */}
                             {message && (
-                                <div className={`p-3 rounded-lg text-sm flex items-center mt-4 ${isSuccess ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                    {isSuccess ? <CheckCircle className="w-4 h-4 mr-2" /> : <XCircle className="w-4 h-4 mr-2" />}
+                                <div className={`p-4 rounded-lg text-sm flex items-start mt-4 shadow-md ${isSuccess ? 'bg-green-100 text-green-700 border border-green-300' : 'bg-red-100 text-red-700 border border-red-300'}`}>
+                                    {isSuccess ? <CheckCircle className="w-5 h-5 mr-2 mt-0.5 flex-shrink-0" /> : <XCircle className="w-5 h-5 mr-2 mt-0.5 flex-shrink-0" />}
                                     <p className="font-medium">{message}</p>
                                 </div>
                             )}
@@ -716,7 +862,13 @@ const App = () => {
                                                         </div>
 
                                                         <button
-                                                            onClick={() => handlePackSelection(pack.id)}
+                                                            onClick={() => {
+                                                                handlePackSelection(pack.id);
+                                                                // Scroll to top after a short delay to show any error messages
+                                                                setTimeout(() => {
+                                                                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                                                                }, 100);
+                                                            }}
                                                             disabled={isProcessingPayment || selectedPack === pack.id || !pendingRecruiterPayload}
                                                             className={`w-full py-4 rounded-xl font-semibold text-white text-base sm:text-lg transition-all shadow-lg hover:shadow-xl ${
                                                                 buttonColor === 'purple' ? 'bg-purple-600 hover:bg-purple-700' :
@@ -724,17 +876,17 @@ const App = () => {
                                                                 'bg-orange-600 hover:bg-orange-700'
                                                             } disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-lg`}
                                                         >
-                                                            {!pendingRecruiterPayload ? 'Fill form above first' :
+                                                            {!pendingRecruiterPayload ? 'Remplissez le formulaire ci-dessus d\'abord' :
                                                             isProcessingPayment && selectedPack === pack.id ? (
                                                                 <span className="flex items-center justify-center">
                                                                     <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                                                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                                                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                                                     </svg>
-                                                                    Processing...
+                                                                    Traitement...
                                                                 </span>
                                                             ) : (
-                                                                'Subscribe Now'
+                                                                'S\'abonner maintenant'
                                                             )}
                                                         </button>
                                                     </div>

@@ -33,6 +33,7 @@ import PaymentSuccess from './pages/PaymentSuccess.tsx';
 function App() {
   const [status, setStatus] = useState("Checking backend...");
   const [offers, setOffers] = useState<Offer[]>([]);
+  const [isVerifyingUser, setIsVerifyingUser] = useState(false);
   // Initialiser depuis localStorage AVANT le premier render pour éviter le logout au refresh
   const [user, setUser] = useState<User | null>(() => {
     const storedUser = apiService.getCurrentUser();
@@ -57,18 +58,46 @@ function App() {
     // IMPORTANT: Ne JAMAIS mettre isAuthenticated à false si on avait déjà un état authentifié
     // au refresh, sauf si localStorage est vraiment vide (pas juste une vérification qui échoue)
     if (authenticated && currentUser) {
-      // Toujours mettre à jour si localStorage dit qu'on est authentifié
-      if (!isAuthenticated || !user || user.id !== currentUser.id) {
-        console.log('✅ Updating state: authenticated in localStorage');
-        setUser(currentUser);
-        setIsAuthenticated(true);
-      }
+      setIsVerifyingUser(true);
+      // Vérifier que l'utilisateur existe toujours dans la base de données
+      apiService.verifyUser()
+        .then((result) => {
+          setIsVerifyingUser(false);
+          if (result.valid && result.user) {
+            console.log('✅ User verified, updating state');
+            setUser(result.user);
+            setIsAuthenticated(true);
+          } else {
+            console.log('❌ User verification failed, logging out');
+            handleLogout();
+            window.location.href = '/signin';
+          }
+        })
+        .catch((error) => {
+          setIsVerifyingUser(false);
+          console.error('❌ Error verifying user:', error);
+          // En cas d'erreur, déconnecter pour être sûr
+          handleLogout();
+          window.location.href = '/signin';
+        });
+    } else {
+      setIsVerifyingUser(false);
     } 
     // NE PAS mettre à false automatiquement - laisser l'initialisation synchrone gérer ça
     // else if (!authenticated && isAuthenticated) {
     //   // Ne pas nettoyer automatiquement au refresh - peut-être que le token est encore valide
     //   console.log('⚠️ localStorage says not authenticated, but keeping state as is');
     // }
+
+    // Écouter l'événement de suppression d'utilisateur
+    const handleUserDeleted = () => {
+      console.log('🚪 User deleted event received, logging out...');
+      handleLogout();
+      // Rediriger vers la page de connexion
+      window.location.href = '/signin';
+    };
+    
+    window.addEventListener('userDeleted', handleUserDeleted);
 
     // Vérifier la santé du backend
     apiService.getHealth()
@@ -93,6 +122,11 @@ function App() {
         console.error("Failed to fetch offers:", error);
         setOffers([]);
       });
+
+    // Cleanup
+    return () => {
+      window.removeEventListener('userDeleted', handleUserDeleted);
+    };
   }, []);
 
   const handleLogin = (loggedInUser: User) => {
@@ -105,6 +139,18 @@ function App() {
     setUser(null);
     setIsAuthenticated(false);
   };
+
+  // Afficher un loader pendant la vérification de l'utilisateur
+  if (isVerifyingUser && isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">Vérification de la session...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <BrowserRouter>
@@ -146,7 +192,11 @@ function App() {
                   : <Settings user={user || undefined} />)
               : <Navigate to="/signin" />
           } />
-          <Route path="/admin" element={<AdminDashboard onLogout={handleLogout} />} />
+          <Route path="/admin" element={
+            isAuthenticated && user?.role === 'admin'
+              ? <AdminDashboard onLogout={handleLogout} />
+              : <Navigate to="/signin" />
+          } />
           <Route path="/post-job" element={
             isAuthenticated && user?.role === 'recruiter'
               ? <PostJobPage onLogout={handleLogout} user={user || undefined} />
@@ -202,7 +252,7 @@ function App() {
           } />
           <Route path="/subscription-plans" element={
             isAuthenticated && user?.role === 'recruiter'
-              ? <SubscriptionPlans user={user || undefined} onLogout={handleLogout} />
+              ? <SubscriptionPlans user={user || undefined} />
               : <Navigate to="/signin" />
           } />
           <Route path="/payment-success" element={<PaymentSuccess />} />

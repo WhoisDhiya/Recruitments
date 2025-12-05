@@ -6,7 +6,6 @@ import { apiService } from '../services/api';
 const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
-  const [rememberMe, setRememberMe] = useState<boolean>(false);
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
@@ -24,10 +23,6 @@ const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleSocialSignIn = (provider: string): void => {
-    console.log(`Sign in with ${provider}`);
   };
 
   return (
@@ -91,49 +86,12 @@ const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
                 </div>
               </div>
 
-              {/* Remember Me & Forgot Password */}
-              <div className="form-options">
-                <label className="remember-me">
-                  <input
-                    type="checkbox"
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                  />
-                  Remember Me
-                </label>
-                <a href="#" className="forgot-password">Forget password</a>
-              </div>
-
               {/* Sign In Button */}
               <button type="submit" className="signin-button" disabled={isLoading}>
                 {isLoading ? 'Connexion...' : 'Sign In'}
                 <span className="button-arrow">{isLoading ? '⏳' : '→'}</span>
               </button>
             </form>
-
-            {/* Divider */}
-            <div className="divider">
-              <span className="divider-text">or</span>
-            </div>
-
-            {/* Social Sign In Buttons */}
-            <div className="social-buttons">
-              <button 
-                className="social-button facebook-button"
-                onClick={() => handleSocialSignIn('Facebook')}
-              >
-                <span className="social-icon facebook-icon">f</span>
-                Sign in with Facebook
-              </button>
-              
-              <button 
-                className="social-button google-button"
-                onClick={() => handleSocialSignIn('Google')}
-              >
-                <span className="social-icon google-icon">G</span>
-                Sign in with Google
-              </button>
-            </div>
           </div>
         </div>
       </div>

@@ -15,5 +15,8 @@ router.post('/logout', authMiddleware, authController.logout);
 // Mettre à jour le profil utilisateur
 router.put('/users/:userId/profile', authMiddleware, authController.updateUserProfile);
 
+// Vérifier que l'utilisateur existe toujours
+router.get('/verify', authMiddleware, authController.verifyUser);
+
 module.exports = router;
 

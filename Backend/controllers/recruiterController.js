@@ -129,6 +129,17 @@ exports.updateRecruiter = async (req, res) => {
             });
         }
 
+        // Validation de l'email de l'entreprise si fourni
+        if (company_email !== undefined && company_email !== null && company_email !== '') {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+            if (!emailRegex.test(company_email.trim())) {
+                return res.status(400).json({
+                    status: 'ERROR',
+                    message: 'Format d\'email de l\'entreprise invalide. Veuillez entrer un email valide (ex: contact@company.com)'
+                });
+            }
+        }
+
         // Vérifier si le recruteur existe
         const recruiter = await Recruiter.findById(id);
         if (!recruiter) {
@@ -143,7 +154,7 @@ exports.updateRecruiter = async (req, res) => {
         if (company_name !== undefined) updateData.company_name = company_name;
         if (industry !== undefined) updateData.industry = industry;
         if (description !== undefined) updateData.description = description;
-        if (company_email !== undefined) updateData.company_email = company_email;
+        if (company_email !== undefined) updateData.company_email = company_email ? company_email.trim().toLowerCase() : company_email;
         if (company_address !== undefined) updateData.company_address = company_address;
 
         // Mettre à jour
