@@ -83,11 +83,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             break;
           case 'Applications':
             data = await apiService.getAdminApplications();
-            setApplications(data.map((app: ApplicationType) => ({
+            setApplications(data.map((app: any) => ({
               ...app,
-              candidateName: `${app.candidate?.user?.first_name || ''} ${app.candidate?.user?.last_name || ''}`,
-              jobTitle: app.offer?.title || 'N/A',
-              dateApplied: new Date(app.date_application).toLocaleDateString(),
+              candidateName: app.first_name && app.last_name 
+                ? `${app.first_name} ${app.last_name}`.trim()
+                : app.candidate?.user?.first_name && app.candidate?.user?.last_name
+                ? `${app.candidate.user.first_name} ${app.candidate.user.last_name}`.trim()
+                : 'N/A',
+              jobTitle: app.offer_title || app.offer?.title || 'N/A',
+              dateApplied: app.date_application ? new Date(app.date_application).toLocaleDateString() : 'N/A',
             })));
             break;
           case 'Dashboard': {

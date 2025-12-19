@@ -167,7 +167,18 @@ const Settings: React.FC<SettingsProps> = ({ user }) => {
       setSaveMessage('✓ Company information updated successfully');
       setTimeout(() => setSaveMessage(''), 3000);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Error saving company information';
+      let errorMessage = error instanceof Error ? error.message : 'Error saving company information';
+      
+      // Vérifier si c'est une erreur d'unicité du company_email
+      if (error instanceof Error && (
+        error.message.includes('email d\'entreprise') || 
+        error.message.includes('déjà utilisé') ||
+        error.message.includes('already used')
+      )) {
+        setCompanyEmailError(error.message);
+        errorMessage = error.message;
+      }
+      
       setSaveMessage(`❌ ${errorMessage}`);
     } finally {
       setIsSaving(false);

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 // lucide-react icons for aesthetics
-import { Lock, CheckCircle, XCircle, Briefcase, Building2, TrendingUp, Menu, User, Mail, MapPin } from 'lucide-react';
+import { CheckCircle, XCircle, Briefcase, Building2, TrendingUp, Menu, User, Mail, MapPin, Eye, EyeOff } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { apiService } from '../services/api';
 
@@ -48,6 +48,10 @@ const App = () => {
     const [passwordError, setPasswordError] = useState<string>("");
     const [passwordStrength, setPasswordStrength] = useState<{ valid: boolean; message: string }>({ valid: false, message: '' });
     const [companyEmailError, setCompanyEmailError] = useState<string>("");
+    
+    // Password visibility states
+    const [showPassword, setShowPassword] = useState<boolean>(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState<boolean>(false);
     
     // Pack selection state (for recruiters) - Always show packs for recruiters
     const [packs, setPacks] = useState<any[]>([]);
@@ -302,7 +306,19 @@ const App = () => {
                     console.log('Pending recruiter created with ID:', pending_id);
                 } catch (err: any) {
                     console.error('Failed to create pending recruiter:', err);
-                    setMessage(err?.message || 'Failed to prepare registration. Please try again.');
+                    let errorMessage = err?.message || 'Failed to prepare registration. Please try again.';
+                    
+                    // Vérifier si c'est une erreur d'unicité du company_email
+                    if (err?.message && (
+                        err.message.includes('email d\'entreprise') || 
+                        err.message.includes('déjà utilisé') ||
+                        err.message.includes('already used')
+                    )) {
+                        setCompanyEmailError(err.message);
+                        errorMessage = err.message;
+                    }
+                    
+                    setMessage(errorMessage);
                     setIsProcessingPayment(false);
                     setSelectedPack(null);
                     return;
@@ -537,7 +553,7 @@ const App = () => {
                             <div>
                                 <div className="relative">
                                     <input 
-                                        type="password" 
+                                        type={showPassword ? "text" : "password"} 
                                         placeholder="Mot de passe (min. 8 caractères, 1 majuscule, 1 minuscule, 1 chiffre)" 
                                         value={password} 
                                         onChange={(e) => {
@@ -555,7 +571,14 @@ const App = () => {
                                         className={`${inputClasses} pr-10 ${passwordError ? 'border-red-500' : password && passwordStrength.valid ? 'border-green-500' : ''}`}
                                         required 
                                     />
-                                    <Lock className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 cursor-pointer" />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}
+                                    >
+                                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    </button>
                                 </div>
                                 {passwordError && (
                                     <p className="mt-1 text-sm text-red-600">{passwordError}</p>
@@ -579,14 +602,21 @@ const App = () => {
                             {/* Confirm Password */}
                             <div className="relative">
                                 <input 
-                                    type="password" 
+                                    type={showConfirmPassword ? "text" : "password"} 
                                     placeholder="Confirm Password" 
                                     value={confirmPassword} 
                                     onChange={(e) => setConfirmPassword(e.target.value)} 
                                     className={inputClasses + " pr-10"} 
                                     required 
                                 />
-                                <Lock className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 cursor-pointer" />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}
+                                >
+                                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                </button>
                             </div>
 
                             {/* Conditional fields based on user type */}

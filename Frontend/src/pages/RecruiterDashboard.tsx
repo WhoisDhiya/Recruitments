@@ -869,7 +869,6 @@ const RecruiterDashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
           </div>
         </div>
         <div className="header-actions">
-          <button className="notification-btn-header">🔔</button>
           <button 
             className="post-job-btn"
             onClick={() => setActiveTab('Post_a_Job')}

@@ -40,13 +40,33 @@ const JobCard: React.FC<JobCardProps> = ({
   onSaveJob,
   isSaved = false
 }) => {
+  const navigate = useNavigate();
+  
   const handleApply = () => {
     onApplyClick(job.id);
   };
 
-  const salaryDisplay = job.salary_min && job.salary_max 
-    ? `${job.salary_min} - ${job.salary_max} DT/month`
-    : 'Salary not specified';
+  const handleViewDetails = () => {
+    navigate(`/job-details/${job.id}`);
+  };
+
+  const salaryDisplay = (() => {
+    const min = job.salary_min;
+    const max = job.salary_max;
+    const type = job.salary_type || 'Monthly';
+    
+    if (min && max) {
+      const typeLabel = type === 'Yearly' ? 'year' : type === 'Hourly' ? 'hour' : 'month';
+      return `${min} - ${max} DT/${typeLabel}`;
+    } else if (min) {
+      const typeLabel = type === 'Yearly' ? 'year' : type === 'Hourly' ? 'hour' : 'month';
+      return `From ${min} DT/${typeLabel}`;
+    } else if (max) {
+      const typeLabel = type === 'Yearly' ? 'year' : type === 'Hourly' ? 'hour' : 'month';
+      return `Up to ${max} DT/${typeLabel}`;
+    }
+    return null; // Return null instead of string to conditionally hide
+  })();
 
   if (viewMode === 'grid') {
     return (
@@ -62,14 +82,21 @@ const JobCard: React.FC<JobCardProps> = ({
         </div>
         
         <div className="job-card-body">
-          <p className="job-location">📍 {job.location || 'Location not specified'}</p>
-          <p className="job-salary">💰 {salaryDisplay}</p>
-          <p className="job-type">{job.employment_type || 'Full-time'}</p>
-          <p className="job-description">{job.description?.substring(0, 100)}...</p>
+          {job.location && <p className="job-location">📍 {job.location}</p>}
+          {salaryDisplay && <p className="job-salary">💰 {salaryDisplay}</p>}
+          {job.employment_type && <p className="job-type">{job.employment_type}</p>}
+          {job.description && <p className="job-description">{job.description.substring(0, 100)}...</p>}
         </div>
         
         <div className="job-card-footer">
           <div className="job-actions">
+            <button 
+              className="view-details-btn"
+              onClick={handleViewDetails}
+              title="View job details"
+            >
+              📋 View Details
+            </button>
             <button 
               className={`apply-btn ${!isAuthenticated ? 'login-required' : ''}`}
               onClick={handleApply}
@@ -105,22 +132,36 @@ const JobCard: React.FC<JobCardProps> = ({
         
         <div className="job-list-info">
           <div className="job-title-section">
-            <h3 className="job-title">{job.title}</h3>
+            <h3 
+              className="job-title" 
+              onClick={handleViewDetails}
+              style={{ cursor: 'pointer', color: '#2196F3' }}
+              title="Click to view job details"
+            >
+              {job.title}
+            </h3>
             <p className="job-company">{job.company_name || 'Company Name'}</p>
           </div>
           
           <div className="job-meta-info">
-            <span className="job-location">📍 {job.location || 'Location not specified'}</span>
-            <span className="job-type">{job.employment_type || 'Full-time'}</span>
-            <span className="job-salary">💰 {salaryDisplay}</span>
+            {job.location && <span className="job-location">📍 {job.location}</span>}
+            {job.employment_type && <span className="job-type">{job.employment_type}</span>}
+            {salaryDisplay && <span className="job-salary">💰 {salaryDisplay}</span>}
           </div>
           
-          <p className="job-description">{job.description?.substring(0, 150)}...</p>
+          {job.description && <p className="job-description">{job.description.substring(0, 150)}...</p>}
         </div>
       </div>
       
       <div className="job-card-list-actions">
         <div className="job-actions">
+          <button 
+            className="view-details-btn"
+            onClick={handleViewDetails}
+            title="View job details"
+          >
+            📋 View Details
+          </button>
           <button 
             className={`apply-btn ${!isAuthenticated ? 'login-required' : ''}`}
             onClick={handleApply}
@@ -454,171 +495,6 @@ const FindJobsList: React.FC<FindJobsListProps> = ({ user, isAuthenticated, onLo
         {/* Main Content */}
         <main className="dashboard-main" style={{ padding: '20px' }}>
           <div className="find-jobs-container">
-            {/* Search and Filter Section */}
-            <div className="search-section">
-              <form className="search-form" onSubmit={handleSearch}>
-                <div className="search-row">
-                  <div className="search-input-group">
-                    <input
-                      type="text"
-                      placeholder="Job title, keyword, company..."
-                      className="search-input"
-                      value={filters.keyword}
-                      onChange={(e) => handleFilterChange('keyword', e.target.value)}
-                    />
-                  </div>
-
-                  <div className="location-input-group">
-                    <select
-                      className="location-select"
-                      value={filters.location}
-                      onChange={(e) => handleFilterChange('location', e.target.value)}
-                    >
-                      {locations.map(loc => (
-                        <option key={loc} value={loc}>{loc}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="category-input-group">
-                    <select
-                      className="category-select"
-                      value={filters.category}
-                      onChange={(e) => handleFilterChange('category', e.target.value)}
-                    >
-                      {categories.map(cat => (
-                        <option key={cat} value={cat}>{cat}</option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      className="advanced-toggle-btn"
-                      onClick={() => setShowAdvancedFilter(!showAdvancedFilter)}
-                      title="Advanced filters"
-                    >
-                      <span className="advanced-icon">⚙️</span>
-                      <span className="advanced-label">Advanced Filter</span>
-                    </button>
-                  </div>
-
-                  <button type="submit" className="find-job-btn">Find Job</button>
-                </div>
-              </form>
-
-              {/* Advanced Filters Modal */}
-              {showAdvancedFilter && (
-                <div className="advanced-modal-overlay" onClick={() => setShowAdvancedFilter(false)}>
-                  <div className="advanced-modal" onClick={(e) => e.stopPropagation()}>
-                    <div className="advanced-filters">
-                      <h4 className="advanced-title">Advanced filters</h4>
-                      
-                      {/* Salary Range */}
-                      <div className="advanced-group">
-                        <label className="block font-medium mb-2">Salary Range</label>
-                        <div className="radio-list">
-                          {['', ...salaryOptions].map((r) => (
-                            <label key={r} style={{display:'block', marginBottom:'0.4rem'}}>
-                              <input
-                                type="radio"
-                                name="salaryRange"
-                                value={r}
-                                checked={filters.salaryRange === r}
-                                onChange={() => setFilters(prev => ({ ...prev, salaryRange: r }))}
-                              />
-                              <span style={{marginLeft:'0.5rem'}}>{r ? `${r} DT` : 'Any'}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Job Type */}
-                      <div className="advanced-group">
-                        <label className="block font-medium mb-2">Job Type</label>
-                        <div className="checkbox-list">
-                          {jobTypeOptions.map(opt => (
-                            <label key={opt} style={{display:'block', marginBottom:'0.4rem'}}>
-                              <input
-                                type="checkbox"
-                                value={opt}
-                                checked={filters.jobTypes?.includes(opt)}
-                                onChange={(e) => {
-                                  const checked = e.target.checked;
-                                  setFilters(prev => {
-                                    const current = prev.jobTypes || ['All'];
-                                    let next: string[] = [...current];
-                                    if (opt === 'All') {
-                                      next = checked ? ['All'] : [];
-                                    } else {
-                                      next = next.filter(x => x !== 'All');
-                                      if (checked) next.push(opt);
-                                      else next = next.filter(x => x !== opt);
-                                    }
-                                    if (next.length === 0) next = ['All'];
-                                    return { ...prev, jobTypes: next };
-                                  });
-                                }}
-                              />
-                              <span style={{marginLeft:'0.5rem'}}>{opt}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Education Level */}
-                      <div className="advanced-group">
-                        <label className="block font-medium mb-2">Education Level</label>
-                        <div className="checkbox-list">
-                          {educationLevels.map(opt => (
-                            <label key={opt} style={{display:'block', marginBottom:'0.4rem'}}>
-                              <input
-                                type="checkbox"
-                                value={opt}
-                                checked={filters.educations?.includes(opt)}
-                                onChange={(e) => {
-                                  const checked = e.target.checked;
-                                  setFilters(prev => {
-                                    const current = prev.educations || ['All'];
-                                    let next: string[] = [...current];
-                                    if (opt === 'All') {
-                                      next = checked ? ['All'] : [];
-                                    } else {
-                                      next = next.filter(x => x !== 'All');
-                                      if (checked) next.push(opt);
-                                      else next = next.filter(x => x !== opt);
-                                    }
-                                    if (next.length === 0) next = ['All'];
-                                    return { ...prev, educations: next };
-                                  });
-                                }}
-                              />
-                              <span style={{marginLeft:'0.5rem'}}>{opt}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="advanced-actions">
-                        <button 
-                          type="button" 
-                          className="btn btn-outline"
-                          onClick={() => setShowAdvancedFilter(false)}
-                        >
-                          Close
-                        </button>
-                        <button 
-                          type="button" 
-                          className="btn btn-primary"
-                          onClick={() => setShowAdvancedFilter(false)}
-                        >
-                          Apply Filters
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
             {/* Results Section */}
             <div className="results-section">
               <div className="results-header">

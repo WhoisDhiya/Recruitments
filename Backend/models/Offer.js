@@ -25,9 +25,20 @@ class Offer {
     // Récupérer toutes les offres
     static async findAll() {
         const [rows] = await db.query(`
-            SELECT o.*, r.company_name 
+            SELECT 
+                o.*,
+                r.company_name,
+                r.company_address AS location,
+                req.minSalary AS salary_min,
+                req.maxSalary AS salary_max,
+                req.salaryType AS salary_type,
+                req.jobType AS employment_type,
+                req.description,
+                req.jobLevel AS job_level,
+                req.education AS education_level
             FROM offers o 
             JOIN recruiters r ON o.recruiter_id = r.id 
+            LEFT JOIN requirements req ON req.offer_id = o.id
             ORDER BY o.date_offer DESC
         `);
         return rows;

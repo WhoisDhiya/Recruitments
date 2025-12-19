@@ -1147,6 +1147,12 @@ class ApiService {
     if (!response.ok) {
       throw new Error(data.message || 'Payment verification failed');
     }
+    
+    // If backend returned success: false, treat it as an error
+    if (data.success === false) {
+      throw new Error(data.message || 'Payment verification failed');
+    }
+    
     // If backend returned a token/user, save it so the user is authenticated after payment
     if (data.token && data.user) {
       this.token = data.token;
@@ -1154,7 +1160,8 @@ class ApiService {
       localStorage.setItem('user', JSON.stringify(data.user));
     }
 
-    return { success: data.success, message: data.message };
+    // Default to success: true if not explicitly set (for backward compatibility)
+    return { success: data.success !== false, message: data.message || 'Payment successful' };
   }
 
   async checkActiveSubscription(recruiterId: number): Promise<{ hasActiveSubscription: boolean; data?: any }> {

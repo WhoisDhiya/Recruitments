@@ -1,5 +1,6 @@
 const db = require("../config/database");
 const Notification = require("../models/Notification");
+const Application = require("../models/Application");
 
 const createApplication = async (req, res) => {
     try {
@@ -32,6 +33,31 @@ const createApplication = async (req, res) => {
         }
 
         const candidateId = rows[0].id;
+
+        // ✅ IMPORTANT: Vérifier que l'offre n'est pas expirée (utilise la date serveur SQL)
+        //    CURDATE() utilise la date du serveur SQL, pas celle du client
+        //    Même si le client change sa date PC, cette vérification reste fiable
+        const [offerCheck] = await db.query(
+            `SELECT id, date_expiration, title 
+             FROM offers 
+             WHERE id = ? 
+             AND (date_expiration IS NULL OR date_expiration >= CURDATE())`,
+            [offer_id]
+        );
+
+        if (offerCheck.length === 0) {
+            return res.status(400).json({ 
+                message: "Cette offre n'existe pas ou a expiré. Vous ne pouvez plus postuler à cette offre." 
+            });
+        }
+
+        // ✅ IMPORTANT: Vérifier si le candidat a déjà postulé à cette offre
+        const alreadyApplied = await Application.checkExistingApplication(candidateId, offer_id);
+        if (alreadyApplied) {
+            return res.status(400).json({ 
+                message: "Vous avez déjà postulé à cette offre. Vous ne pouvez postuler qu'une seule fois par offre." 
+            });
+        }
 
         // Validation du numéro de téléphone si fourni
         if (phone !== undefined && phone !== null && String(phone).trim() !== '') {

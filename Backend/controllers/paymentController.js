@@ -158,11 +158,11 @@ exports.handlePaymentSuccess = async (req, res) => {
         const { session_id } = req.body;
 
         if (!session_id) {
-            return res.status(400).json({ message: "Session ID manquant" });
+            return res.status(400).json({ success: false, message: "Session ID manquant" });
         }
 
         if (paymentsDisabled) {
-            return res.status(503).json({ message: 'Payments are temporarily disabled' });
+            return res.status(503).json({ success: false, message: 'Payments are temporarily disabled' });
         }
 
         // 1. Retrieve the session from Stripe using stripeController
@@ -171,11 +171,11 @@ exports.handlePaymentSuccess = async (req, res) => {
             session = await stripeController.retrieveCheckoutSession(session_id);
         } catch (err) {
             console.error('Error retrieving Stripe session:', err);
-            return res.status(500).json({ message: 'Stripe is not configured on the server' });
+            return res.status(500).json({ success: false, message: 'Stripe is not configured on the server' });
         }
 
         if (session.payment_status !== 'paid') {
-            return res.status(400).json({ message: "Le paiement n'a pas été validé." });
+            return res.status(400).json({ success: false, message: "Le paiement n'a pas été validé." });
         }
 
         // 2. Récupérer les infos depuis les metadata
@@ -245,7 +245,7 @@ exports.handlePaymentSuccess = async (req, res) => {
                 console.log('🗑️ Pending recruiter record deleted');
             } catch (err) {
                 console.error('❌ Error creating recruiter from pending:', err);
-                return res.status(500).json({ message: 'Failed to create recruiter after payment', error: err.message });
+                return res.status(500).json({ success: false, message: 'Failed to create recruiter after payment', error: err.message });
             }
         }
 
@@ -255,7 +255,11 @@ exports.handlePaymentSuccess = async (req, res) => {
         const existingPayment = await Payment.findByTransactionId(session.payment_intent);
         if (existingPayment) {
             console.log('⚠️ Payment already processed');
-            return res.json({ message: "Paiement déjà enregistré", subscription: recruiter_id ? await RecruiterSubscription.checkActive(recruiter_id) : null });
+            return res.status(200).json({ 
+                success: true, 
+                message: "Paiement déjà enregistré", 
+                subscription: recruiter_id ? await RecruiterSubscription.checkActive(recruiter_id) : null 
+            });
         }
 
         // 4. Récupérer les détails du pack pour calculer la date de fin
@@ -264,12 +268,12 @@ exports.handlePaymentSuccess = async (req, res) => {
         
         if (!pack) {
             console.error('❌ Pack not found:', pack_id);
-            return res.status(400).json({ message: "Pack not found for subscription" });
+            return res.status(400).json({ success: false, message: "Pack not found for subscription" });
         }
         
         if (!recruiter_id) {
             console.error('❌ Recruiter ID missing after payment processing');
-            return res.status(400).json({ message: "Recruiter ID not found after payment processing" });
+            return res.status(400).json({ success: false, message: "Recruiter ID not found after payment processing" });
         }
         
         console.log('✅ Pack found:', pack.name, '| Recruiter ID:', recruiter_id);
@@ -337,7 +341,11 @@ exports.handlePaymentSuccess = async (req, res) => {
 
     } catch (error) {
         console.error("Erreur validation paiement:", error);
-        res.status(500).json({ message: "Erreur lors de la validation du paiement", error: error.message });
+        res.status(500).json({ 
+            success: false,
+            message: "Erreur lors de la validation du paiement", 
+            error: error.message 
+        });
     }
 };
 

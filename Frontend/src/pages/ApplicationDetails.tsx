@@ -48,25 +48,9 @@ const ApplicationDetails: React.FC<DashboardProps> = ({ onLogout }) => {
       try {
         setLoading(true);
         setError(null);
-        console.log('🔍 Fetching application details for ID:', id);
         const details = await apiService.getApplicationById(parseInt(id));
-        console.log('✅ Application details received:', details);
-        console.log('📋 Application keys:', Object.keys(details || {}));
-        console.log('📋 Phone:', details?.phone);
-        console.log('📋 Address:', details?.address);
-        console.log('📋 Portfolio:', details?.portfolio_url);
-        console.log('📋 Cover letter:', details?.cover_letter);
-        console.log('📋 Email:', details?.email);
-        console.log('📋 CV:', details?.cv);
-        console.log('📋 Full details object:', JSON.stringify(details, null, 2));
         setApplication(details);
       } catch (err: any) {
-        console.error('❌ Error fetching application details:', err);
-        console.error('Error details:', {
-          message: err.message,
-          stack: err.stack,
-          applicationId: id
-        });
         setError(err.message || 'Failed to load application details');
       } finally {
         setLoading(false);
@@ -274,21 +258,6 @@ const ApplicationDetails: React.FC<DashboardProps> = ({ onLogout }) => {
           </div>
 
           <div style={{ padding: '20px' }}>
-            {/* Debug Info - Remove after fixing */}
-            <div style={{ 
-              background: '#fff3cd', 
-              border: '1px solid #ffc107', 
-              padding: '15px', 
-              marginBottom: '20px', 
-              borderRadius: '4px',
-              fontSize: '12px'
-            }}>
-              <strong>🔍 Debug Info (Données reçues du backend):</strong>
-              <pre style={{ marginTop: '10px', overflow: 'auto', maxHeight: '300px', fontSize: '11px' }}>
-                {JSON.stringify(application, null, 2)}
-              </pre>
-            </div>
-
             {/* Status Badge */}
             <div style={{ marginBottom: '30px' }}>
               <span 

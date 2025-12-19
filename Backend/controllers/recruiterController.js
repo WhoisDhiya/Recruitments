@@ -138,6 +138,15 @@ exports.updateRecruiter = async (req, res) => {
                     message: 'Format d\'email de l\'entreprise invalide. Veuillez entrer un email valide (ex: contact@company.com)'
                 });
             }
+            
+            // Vérifier l'unicité du company_email (en excluant le recruteur actuel)
+            const companyEmailCheck = await Recruiter.isCompanyEmailUnique(company_email, id);
+            if (!companyEmailCheck.unique) {
+                return res.status(409).json({
+                    status: 'ERROR',
+                    message: companyEmailCheck.reason
+                });
+            }
         }
 
         // Vérifier si le recruteur existe

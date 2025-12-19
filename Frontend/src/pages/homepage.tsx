@@ -115,10 +115,6 @@ const Homepage: React.FC<{ user?: User; isAuthenticated: boolean; onLogout?: () 
     navigate('/find-jobs');
   };
 
-  const handleFindJobsClick = () => {
-    navigate('/find-jobs');
-  };
-
   return (
     <div className="min-h-screen bg-white">
       {!hideHeader && <Header user={user} isAuthenticated={isAuthenticated} onLogout={onLogout} />}
@@ -132,21 +128,6 @@ const Homepage: React.FC<{ user?: User; isAuthenticated: boolean; onLogout?: () 
                 <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900 mb-6 tracking-tight">
                   Find a job/internship that suits your interest & skills
                 </h1>
-                <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 bg-white p-3 rounded-lg border border-gray-200 shadow-md">
-                  <input
-                    type="text"
-                    placeholder="Job Title, Keyword, or Company"
-                    className="p-3 flex-grow rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Location"
-                    className="p-3 w-full sm:w-1/3 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 hidden sm:block"
-                  />
-                  <button onClick={handleFindJobsClick} className="bg-blue-600 text-white px-8 py-3 rounded-md font-semibold hover:bg-blue-700 transition-all duration-200">
-                    Find Job
-                  </button>
-                </div>
               </div>
               <div className="hidden md:block w-96 h-64 mt-8 md:mt-0 relative rounded-lg overflow-hidden">
                 <img

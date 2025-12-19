@@ -67,6 +67,39 @@ class Recruiter {
         );
         return rows;
     }
+
+    // Vérifier si un company_email existe déjà (dans users ou dans recruiters)
+    // excludeRecruiterId: optionnel, pour exclure un recruteur lors d'une mise à jour
+    static async isCompanyEmailUnique(company_email, excludeRecruiterId = null) {
+        const normalizedEmail = company_email.trim().toLowerCase();
+        
+        // Vérifier si l'email existe dans la table users
+        const [userRows] = await db.query(
+            'SELECT id FROM users WHERE LOWER(email) = ?',
+            [normalizedEmail]
+        );
+        
+        if (userRows.length > 0) {
+            return { unique: false, reason: 'Cet email est déjà utilisé par un utilisateur' };
+        }
+        
+        // Vérifier si l'email existe dans la table recruiters
+        let query = 'SELECT id FROM recruiters WHERE LOWER(company_email) = ?';
+        let params = [normalizedEmail];
+        
+        if (excludeRecruiterId) {
+            query += ' AND id != ?';
+            params.push(excludeRecruiterId);
+        }
+        
+        const [recruiterRows] = await db.query(query, params);
+        
+        if (recruiterRows.length > 0) {
+            return { unique: false, reason: 'Cet email d\'entreprise est déjà utilisé par un autre recruteur' };
+        }
+        
+        return { unique: true };
+    }
 }
 
 module.exports = Recruiter;
