@@ -10,7 +10,7 @@ interface CandidateNotificationsProps {
   onLogout?: () => void;
 }
 
-const CandidateNotifications: React.FC<CandidateNotificationsProps> = ({ user, onLogout }) => {
+const CandidateNotifications: React.FC<CandidateNotificationsProps> = ({ onLogout }) => {
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState<NotificationType[]>([]);
   const [isLoading, setIsLoading] = useState(true);

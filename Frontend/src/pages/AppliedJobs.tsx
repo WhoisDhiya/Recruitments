@@ -34,7 +34,7 @@ interface ApplicationWithOffer {
   };
 }
 
-const AppliedJobs: React.FC<AppliedJobsProps> = ({ user, onLogout }) => {
+const AppliedJobs: React.FC<AppliedJobsProps> = ({ onLogout }) => {
   const navigate = useNavigate();
   const [applications, setApplications] = useState<ApplicationWithOffer[]>([]);
   const [loading, setLoading] = useState(true);

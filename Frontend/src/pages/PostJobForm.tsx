@@ -49,7 +49,7 @@ const defaultFormState: PostJobFormData = {
   responsibilities: '',
 };
 
-const PostJobForm: React.FC<PostJobFormProps> = ({ user, onLogout, editJobId, onSuccess }) => {
+const PostJobForm: React.FC<PostJobFormProps> = ({ user, editJobId, onSuccess }) => {
   const navigate = useNavigate();
   const isEditMode = !!editJobId;
   const [isLoading, setIsLoading] = useState<boolean>(!!editJobId);

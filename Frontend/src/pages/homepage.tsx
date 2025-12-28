@@ -82,7 +82,7 @@ const Homepage: React.FC<{ user?: User; isAuthenticated: boolean; onLogout?: () 
   const navigate = useNavigate();
   const [featuredJobs, setFeaturedJobs] = useState<Offer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [_error, setError] = useState<string | null>(null);
 
   // Charger les offres d'emploi
   useEffect(() => {

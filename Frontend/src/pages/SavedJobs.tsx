@@ -16,7 +16,7 @@ interface SavedJobsProps {
   onLogout?: () => void;
 }
 
-const SavedJobs: React.FC<SavedJobsProps> = ({ user, onLogout }) => {
+const SavedJobs: React.FC<SavedJobsProps> = ({ onLogout }) => {
   const navigate = useNavigate();
   const [savedJobs, setSavedJobs] = useState<Offer[]>([]);
   const [isLoading, setIsLoading] = useState(true);

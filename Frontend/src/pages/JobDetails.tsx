@@ -31,7 +31,7 @@ interface JobDetailsData {
   } | null;
 }
 
-const JobDetails: React.FC<DashboardProps> = ({ onLogout, user }) => {
+const JobDetails: React.FC<DashboardProps> = ({ user }) => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();

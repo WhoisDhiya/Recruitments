@@ -4,7 +4,7 @@ import { AlertCircle, ArrowRight } from 'lucide-react';
 import { apiService } from '../services/api';
 
 const PaymentRequired: React.FC = () => {
-  const navigate = useNavigate();
+  // const navigate = useNavigate();
   const [packs, setPacks] = useState<any[]>([]);
   const [isLoadingPacks, setIsLoadingPacks] = useState(true);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);

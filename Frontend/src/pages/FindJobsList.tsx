@@ -196,7 +196,7 @@ const FindJobsList: React.FC<FindJobsListProps> = ({ user, isAuthenticated, onLo
   const [isLoading, setIsLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [savedJobs, setSavedJobs] = useState<number[]>([]);
-  const [filters, setFilters] = useState<FilterOptions>({
+  const [filters, _setFilters] = useState<FilterOptions>({
     keyword: '',
     location: '',
     category: '',
@@ -206,7 +206,7 @@ const FindJobsList: React.FC<FindJobsListProps> = ({ user, isAuthenticated, onLo
     educations: ['All'],
     jobLevel: ''
   });
-  const [showAdvancedFilter, setShowAdvancedFilter] = useState<boolean>(false);
+  // const [showAdvancedFilter, setShowAdvancedFilter] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState('Overview');
 
   const handleApplyJob = (jobId: number) => {
@@ -244,19 +244,19 @@ const FindJobsList: React.FC<FindJobsListProps> = ({ user, isAuthenticated, onLo
     }
   };
 
-  const categories = [
-    'All Categories', 'Technology', 'Design', 'Marketing', 'Sales', 
-    'Finance', 'Human Resources', 'Operations', 'Other'
-  ];
+  // const categories = [
+  //   'All Categories', 'Technology', 'Design', 'Marketing', 'Sales', 
+  //   'Finance', 'Human Resources', 'Operations', 'Other'
+  // ];
 
-  const locations = [
-    'All Locations', 'Tunisia', 'France', 'United States', 'Canada', 
-    'Germany', 'United Kingdom', 'Italy', 'Spain', 'Remote'
-  ];
+  // const locations = [
+  //   'All Locations', 'Tunisia', 'France', 'United States', 'Canada', 
+  //   'Germany', 'United Kingdom', 'Italy', 'Spain', 'Remote'
+  // ];
 
-  const educationLevels = ['All', 'High School', 'Intermediate', 'Graduation', 'Master degree', 'Bachelor degree'];
-  const salaryOptions = ['1000-2000', '3000-4000', '4000-5000'];
-  const jobTypeOptions = ['All', 'Full time', 'Part time', 'Internship', 'Remote', 'Temporary', 'Contract base'];
+  // const educationLevels = ['All', 'High School', 'Intermediate', 'Graduation', 'Master degree', 'Bachelor degree'];
+  // const salaryOptions = ['1000-2000', '3000-4000', '4000-5000'];
+  // const jobTypeOptions = ['All', 'Full time', 'Part time', 'Internship', 'Remote', 'Temporary', 'Contract base'];
 
   // Navigation items for the top navigation bar
   const navigationItems: NavigationItem[] = [
@@ -418,14 +418,14 @@ const FindJobsList: React.FC<FindJobsListProps> = ({ user, isAuthenticated, onLo
     setFilteredJobs(filtered);
   }, [filters, jobs]);
 
-  const handleFilterChange = (key: keyof FilterOptions, value: string) => {
-    setFilters(prev => ({ ...prev, [key]: value }));
-  };
+  // const handleFilterChange = (key: keyof FilterOptions, value: string) => {
+  //   setFilters(prev => ({ ...prev, [key]: value }));
+  // };
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    // Filters are applied automatically via useEffect
-  };
+  // const handleSearch = (e: React.FormEvent) => {
+  //   e.preventDefault();
+  //   // Filters are applied automatically via useEffect
+  // };
 
   return (
     <div className="dashboard">

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Lock, Bell, Eye, EyeOff, Save, X, Building2 } from 'lucide-react';
+import { Lock, Eye, EyeOff, Save, X, Building2 } from 'lucide-react';
 import './Settings.css';
 import { apiService } from '../services/api';
 import type { User as UserType } from '../types';

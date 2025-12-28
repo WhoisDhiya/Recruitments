@@ -3,13 +3,13 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import './MyJobs.css';
 import type { DashboardProps, PostedJob, RecruiterStats } from '../types';
 import Settings from './Settings';
-import Homepage from './homepage';
+// import Homepage from './homepage';
 import { apiService } from '../services/api';
 
 const MyJobs: React.FC<DashboardProps> = ({ onLogout, user }) => {
     const navigate = useNavigate();
     const location = useLocation();
-    const [activeTab, setActiveTab] = useState<string>('My_Jobs');
+    const [activeTab] = useState<string>('My_Jobs');
     const [stats, setStats] = useState<RecruiterStats>({
       openJobs: 0,
       savedCandidates: 0

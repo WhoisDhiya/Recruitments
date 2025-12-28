@@ -68,6 +68,7 @@ export interface Offer {
   job_level?: string;
   salary_min?: number;
   salary_max?: number;
+  salary_type?: 'Yearly' | 'Monthly' | 'Hourly';
   category?: string;
   created_at?: string;
 }
