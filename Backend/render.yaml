@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: recruitment-backend
+    env: node
+    buildCommand: npm install
+    startCommand: node index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+
+databases:
+  - name: recruitment-mysql
+    databaseName: recruitment_platform
+    user: recruitment_user
+    plan: free
+

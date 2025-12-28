@@ -138,7 +138,26 @@ ensurePacksTable();
 ensureSubscriptionsTable();
 
 // 🧩 Middlewares
-app.use(cors());
+// CORS configuration - accept requests from frontend URL
+const allowedOrigins = [
+    process.env.CLIENT_URL || 'http://localhost:5173',
+    'http://localhost:5173', // Dev fallback
+    'http://localhost:3000'  // Dev fallback
+];
+
+app.use(cors({
+    origin: function (origin, callback) {
+        // Allow requests with no origin (mobile apps, Postman, etc.)
+        if (!origin) return callback(null, true);
+        
+        if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    credentials: true
+}));
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ extended: true,limit:'100mb' }));
 
