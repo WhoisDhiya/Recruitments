@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+// import { useNavigate } from 'react-router-dom';
 import { AlertCircle, ArrowRight } from 'lucide-react';
 import { apiService } from '../services/api';
 
