@@ -9,11 +9,16 @@ const dbConfig = {
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
+    port: process.env.DB_PORT || 3306,
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,
     enableKeepAlive: true,
-    keepAliveInitialDelay: 0
+    keepAliveInitialDelay: 0,
+    // SSL configuration for Aiven (required)
+    ssl: {
+        rejectUnauthorized: false // Aiven uses self-signed certificates
+    }
 };
 
 // Création du pool de connexions
