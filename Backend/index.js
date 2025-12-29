@@ -139,22 +139,46 @@ ensureSubscriptionsTable();
 
 // 🧩 Middlewares
 // CORS configuration - accept requests from frontend URL
+// Clean CLIENT_URL (remove trailing slash)
+const clientUrl = process.env.CLIENT_URL ? process.env.CLIENT_URL.replace(/\/$/, '') : 'http://localhost:5173';
+
 const allowedOrigins = [
-    process.env.CLIENT_URL || 'http://localhost:5173',
+    clientUrl,
+    clientUrl.replace('https://', 'https://'), // Ensure https
     'http://localhost:5173', // Dev fallback
     'http://localhost:3000'  // Dev fallback
 ];
+
+// Add Vercel preview URLs pattern
+const isVercelUrl = (url) => {
+    if (!url) return false;
+    return url.includes('vercel.app') || url.includes('vercel.com');
+};
 
 app.use(cors({
     origin: function (origin, callback) {
         // Allow requests with no origin (mobile apps, Postman, etc.)
         if (!origin) return callback(null, true);
         
-        if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
-            callback(null, true);
-        } else {
-            callback(new Error('Not allowed by CORS'));
+        // Clean origin (remove trailing slash)
+        const cleanOrigin = origin.replace(/\/$/, '');
+        
+        // Check if origin is in allowed list
+        if (allowedOrigins.some(allowed => cleanOrigin === allowed.replace(/\/$/, ''))) {
+            return callback(null, true);
         }
+        
+        // Allow all Vercel URLs (preview deployments, etc.)
+        if (isVercelUrl(cleanOrigin)) {
+            return callback(null, true);
+        }
+        
+        // Allow in development mode
+        if (process.env.NODE_ENV === 'development') {
+            return callback(null, true);
+        }
+        
+        callback(new Error('Not allowed by CORS'));
     },
     credentials: true
 }));
