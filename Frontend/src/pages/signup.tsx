@@ -4,9 +4,7 @@ import { CheckCircle, XCircle, Briefcase, Building2, TrendingUp, Menu, User, Mai
 import type { LucideIcon } from 'lucide-react';
 import { apiService } from '../services/api';
 
-// Define the backend API endpoint here. 
-// IMPORTANT: Ensure your backend is running on this URL and has CORS enabled!
-const BACKEND_API_URL = "http://localhost:3000/api/auth/signup";
+// Using apiService which uses VITE_API_URL from environment variables
 
 /**
  * NOTE: The mockAxiosPost function has been removed. 
@@ -197,26 +195,11 @@ const App = () => {
                 }, 100);
                 return;
             } else {
-                // --- START: REAL NETWORK REQUEST USING FETCH (candidates) ---
-                const response = await fetch(BACKEND_API_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(payload)
-                });
-
-                // Read the response body (can be success data or an error object)
-                const result = await response.json(); 
-
-                if (!response.ok) {
-                    // If the server response is an error (e.g., 400, 500), throw an error.
-                    // We use result.message for specific backend error reporting.
-                    throw new Error(result.message || `HTTP error! Status: ${response.status}`);
-                }
+                // --- START: REAL NETWORK REQUEST USING apiService (candidates) ---
+                const result = await apiService.signup(payload);
 
                 // Success case: Extract the real userId from the backend response
-                const userId = result.data.user_id; 
+                const userId = result.user.id; 
                 console.log('User created with ID:', userId);
 
                 // For candidates, redirect to sign in
