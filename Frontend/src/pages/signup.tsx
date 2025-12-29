@@ -196,7 +196,15 @@ const App = () => {
                 return;
             } else {
                 // --- START: REAL NETWORK REQUEST USING apiService (candidates) ---
-                const result = await apiService.signup(payload);
+                const result = await apiService.signup(payload as {
+                    last_name: string;
+                    first_name: string;
+                    email: string;
+                    password: string;
+                    role: 'recruiter' | 'candidate' | 'admin';
+                    cv?: string;
+                    image?: string;
+                });
 
                 // Success case: Extract the real userId from the backend response
                 const userId = result.user.id; 

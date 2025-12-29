@@ -163,13 +163,34 @@ exports.signup = async (req, res) => {
             console.log('Recruiter created with ID:', recruiterId);
         }
 
+        // Récupérer l'utilisateur créé pour retourner les données complètes
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(500).json({
+                status: 'ERROR',
+                message: 'Erreur lors de la récupération de l\'utilisateur créé'
+            });
+        }
+
+        // Générer un token JWT (comme pour login)
+        const token = jwt.sign(
+            { user_id: user.id, email: user.email, role: user.role },
+            SECRET_KEY,
+            { expiresIn: '24h' }
+        );
+
         res.status(201).json({
             status: 'SUCCESS',
             message: 'Utilisateur inscrit avec succès',
             data: {
-                user_id: userId,
-                email,
-                role
+                user: {
+                    id: user.id,
+                    first_name: user.first_name,
+                    last_name: user.last_name,
+                    email: user.email,
+                    role: user.role
+                },
+                token: token
             }
         });
     } catch (error) {
